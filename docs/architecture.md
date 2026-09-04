@@ -8,9 +8,9 @@
 5. The daemon publishes a mode-0644 JSON snapshot in `/run`.
 6. The unprivileged GTK OSD or GNOME Shell extension only reads that snapshot.
 
-The daemon reads executable paths, command lines and the two Steam app-id
-environment entries needed to identify Proton games. It does not store or log
-process environments.
+The daemon scans executable symlink paths first. It reads command lines and the
+two Steam app-id environment entries only for Proton/Wine runtime candidates,
+never for unrelated processes. It does not store or log process environments.
 
 ## Game lock
 

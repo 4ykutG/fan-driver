@@ -55,6 +55,23 @@ class GameDetectionTests(unittest.TestCase):
         self.assertEqual(
             hotkeyd.process_game_label('103', {'my-game'}), 'my-game')
 
+    def test_unrelated_process_environment_is_not_read(self):
+        self.process(
+            106, '/usr/bin/bash', b'SteamAppId=730\0',
+            b'bash\0/home/user/steamapps/common/Game/game.exe\0')
+        original_reader = hotkeyd.read_proc_file
+
+        def reject_environment_read(pid, name, **kwargs):
+            if name == 'environ':
+                self.fail('unrelated process environment was read')
+            return original_reader(pid, name, **kwargs)
+
+        hotkeyd.read_proc_file = reject_environment_read
+        try:
+            self.assertIsNone(hotkeyd.process_game_label('106', set()))
+        finally:
+            hotkeyd.read_proc_file = original_reader
+
     def test_running_games_is_unique_and_sorted(self):
         self.process(104, '/opt/games/zeta')
         self.process(105, '/opt/games/alpha')

@@ -152,11 +152,20 @@ def process_game_label(pid, configured_games):
         return basename
 
     lower_exe = exe.lower()
+    runtime_candidate = any(
+        marker in lower_exe for marker in STEAM_RUNTIME_MARKERS)
     if STEAM_PATH_MARKER in lower_exe:
         if basename.lower() in STEAM_HELPERS:
             return None
-        if not any(marker in lower_exe for marker in STEAM_RUNTIME_MARKERS):
+        if not runtime_candidate:
             return basename or 'Steam oyunu'
+
+    # Reading /proc/*/environ for every process is both unnecessary and
+    # expensive. Native Steam games were handled by their executable path;
+    # only Proton/Wine runtime candidates need the Steam app-id fallback.
+    if not runtime_candidate and not basename.lower().startswith(
+            ('wine', 'proton')):
+        return None
 
     environ = read_proc_file(pid, 'environ', binary=True)
     if not environ:
@@ -316,6 +325,9 @@ class HotkeyDaemon:
         result = run_backend('status')
         if result is not None:
             self.current = result['profile']
+            self.publish('sync', profile=result['profile'], temp=result['temp'],
+                         fan=result['fan'], boost=result['boost'],
+                         message='Hazır')
 
     def scan_game_state(self):
         self.game_scan_at = time.monotonic() + GAME_SCAN_INTERVAL
