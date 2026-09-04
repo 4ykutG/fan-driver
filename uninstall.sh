@@ -23,7 +23,7 @@ rm -f /usr/local/sbin/msi-profile-control \
 	/etc/systemd/user/msi-profile-osd.service \
 	/etc/udev/hwdb.d/90-msi-gf63-hotkeys.hwdb
 rm -rf "/usr/share/gnome-shell/extensions/${EXTENSION_UUID}"
-$purge && rm -f /etc/msi-profile-games.conf
+$purge && rm -f /etc/msi-profile-games.conf /etc/msi-profile-control.conf
 
 systemd-hwdb update
 udevadm trigger --subsystem-match=input --action=change

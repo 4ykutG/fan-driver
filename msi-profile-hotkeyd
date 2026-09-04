@@ -15,6 +15,7 @@ process environment and executable path; while one is running the backend is
 locked to the fixed performance profile.
 """
 
+import configparser
 import json
 import os
 import selectors
@@ -35,6 +36,8 @@ OSD_STATE_FILE = os.path.join(STATE_DIR, 'osd-state')
 GAME_ACTIVE_FILE = os.path.join(STATE_DIR, 'game-active')
 GAME_LIST_FILE = os.environ.get(
     'MSI_PROFILE_GAME_LIST', '/etc/msi-profile-games.conf')
+CONFIG_FILE = os.environ.get(
+    'MSI_PROFILE_CONFIG', '/etc/msi-profile-control.conf')
 PROC_ROOT = os.environ.get('MSI_PROFILE_PROC_ROOT', '/proc')
 
 PROFILE_ORDER = ('super-battery', 'silent', 'balanced', 'performance')
@@ -45,6 +48,12 @@ GUARD_INTERVAL = 15.0
 RESCAN_INTERVAL = 30.0
 GAME_SCAN_INTERVAL = 2.0
 GAME_EXIT_DELAY = 8.0
+
+SETTING_RANGES = {
+    'game_scan_interval': (GAME_SCAN_INTERVAL, 0.5, 10.0),
+    'game_exit_delay': (GAME_EXIT_DELAY, 0.0, 60.0),
+    'guard_interval': (GUARD_INTERVAL, 5.0, 120.0),
+}
 
 STEAM_PATH_MARKER = '/steamapps/common/'
 STEAM_RUNTIME_MARKERS = (
@@ -59,6 +68,25 @@ STEAM_HELPERS = {
 
 def log(message, priority=syslog.LOG_INFO):
     syslog.syslog(priority, message)
+
+
+def read_settings():
+    """Read bounded daemon timing settings without executing config data."""
+    values = {key: limits[0] for key, limits in SETTING_RANGES.items()}
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        with open(CONFIG_FILE, encoding='utf-8') as config_file:
+            parser.read_file(config_file)
+    except (OSError, configparser.Error):
+        return values
+
+    for key, (default, minimum, maximum) in SETTING_RANGES.items():
+        try:
+            value = parser.getfloat('daemon', key)
+        except (configparser.Error, ValueError):
+            continue
+        values[key] = value if minimum <= value <= maximum else default
+    return values
 
 
 def find_prog3_devices():
@@ -206,13 +234,17 @@ def running_games():
 
 class HotkeyDaemon:
     def __init__(self):
+        settings = read_settings()
         self.selector = selectors.DefaultSelector()
         self.open_devices = {}
         self.sequence = 0
         self.current = 'balanced'
         self.pending = None
         self.commit_at = None
-        self.guard_at = time.monotonic() + GUARD_INTERVAL
+        self.game_scan_interval = settings['game_scan_interval']
+        self.game_exit_delay = settings['game_exit_delay']
+        self.guard_interval = settings['guard_interval']
+        self.guard_at = time.monotonic() + self.guard_interval
         self.rescan_at = 0.0
         self.game_scan_at = 0.0
         self.game_active = os.path.exists(GAME_ACTIVE_FILE)
@@ -314,7 +346,7 @@ class HotkeyDaemon:
                      message=result['message'])
 
     def run_guard(self):
-        self.guard_at = time.monotonic() + GUARD_INTERVAL
+        self.guard_at = time.monotonic() + self.guard_interval
         if self.pending is not None:
             return
         result = run_backend('guard')
@@ -330,7 +362,7 @@ class HotkeyDaemon:
                          message='Hazır')
 
     def scan_game_state(self):
-        self.game_scan_at = time.monotonic() + GAME_SCAN_INTERVAL
+        self.game_scan_at = time.monotonic() + self.game_scan_interval
         games = running_games()
         now = time.monotonic()
 
@@ -357,7 +389,7 @@ class HotkeyDaemon:
         if self.game_missing_since is None:
             self.game_missing_since = now
             return
-        if now - self.game_missing_since < GAME_EXIT_DELAY:
+        if now - self.game_missing_since < self.game_exit_delay:
             return
 
         result = run_backend('game-stop')

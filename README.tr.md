@@ -42,6 +42,11 @@ değiştirilmeden önce zaman damgalı yedek alınır.
 Steam dışı oyunların çalıştırılabilir dosya adlarını
 `/etc/msi-profile-games.conf` dosyasına birer satır olarak ekleyebilirsiniz.
 
+Oyun tarama, kapanış gecikmesi ve günlük termal kontrol süreleri
+`/etc/msi-profile-control.conf` dosyasından güvenli sınırlar içinde
+değiştirilebilir. Sonrasında `sudo systemctl restart msi-profile-hotkeyd`
+çalıştırılır.
+
 Destek isterken kişisel veri toplamayan salt-okunur tanı çıktısı:
 
 ```bash

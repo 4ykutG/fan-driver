@@ -107,6 +107,12 @@ Native Steam and Proton games are detected automatically. For a non-Steam
 game, add its executable basename to `/etc/msi-profile-games.conf`, one name
 per line.
 
+Daemon timing can be changed in `/etc/msi-profile-control.conf` and takes
+effect after `sudo systemctl restart msi-profile-hotkeyd`. Accepted ranges are
+0.5–10 seconds for scanning, 0–60 seconds for exit delay and 5–120 seconds for
+the daily thermal guard. Configuration is parsed as data; it is never sourced
+as shell code.
+
 ## Uninstall
 
 ```bash

@@ -42,6 +42,10 @@ if [[ ! -e /etc/msi-profile-games.conf ]]; then
 	install -Dm0644 "${SOURCE_DIR}/msi-profile-games.conf" \
 		/etc/msi-profile-games.conf
 fi
+if [[ ! -e /etc/msi-profile-control.conf ]]; then
+	install -Dm0644 "${SOURCE_DIR}/msi-profile-control.conf" \
+		/etc/msi-profile-control.conf
+fi
 install -Dm0644 "${SOURCE_DIR}/gnome-extension/extension.js" \
 	"${EXTENSION_DIR}/extension.js"
 install -Dm0644 "${SOURCE_DIR}/gnome-extension/metadata.json" \
