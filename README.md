@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/4ykutG/fan-driver/actions/workflows/test.yml/badge.svg)](https://github.com/4ykutG/fan-driver/actions/workflows/test.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/4ykutG/fan-driver)](https://github.com/4ykutG/fan-driver/releases)
 
 An open-source MSI Center-style profile controller for the **MSI Thin GF63
 12VE** on Linux. It combines Fn+F7 profile selection, an on-screen display,
