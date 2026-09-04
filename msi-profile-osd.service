@@ -1,0 +1,14 @@
+[Unit]
+Description=MSI Center-style profile OSD
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/msi-profile-osd
+Restart=on-failure
+RestartSec=2
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target

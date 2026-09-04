@@ -1,0 +1,8 @@
+{
+  "uuid": "msi-gf63-profile-osd@4ykutg.github.io",
+  "name": "MSI GF63 Profile OSD",
+  "description": "Shows the MSI GF63 profile selector driven by msi-profile-hotkeyd.",
+  "shell-version": ["50"],
+  "url": "https://github.com/4ykutG/msi-gf63-auto-profile",
+  "version": 1
+}

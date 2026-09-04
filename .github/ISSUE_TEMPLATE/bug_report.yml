@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible software problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed passwords, tokens, Steam data and personal information.
+          required: true
+  - type: input
+    attributes:
+      label: Version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Distribution and kernel
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: DMI model and EC firmware
+      placeholder: Thin GF63 12VE / 16R8IMS1.107
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true

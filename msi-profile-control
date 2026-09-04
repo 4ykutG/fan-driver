@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -Eeuo pipefail
+
+readonly APP_NAME="msi-profile-control"
+readonly APP_VERSION="0.1.0"
+readonly SYSFS_BASE="/sys/devices/platform/msi-ec"
+readonly STATE_DIR="/run/${APP_NAME}"
+readonly STATE_FILE="${STATE_DIR}/state"
+readonly RESULT_FILE="${STATE_DIR}/last-result"
+readonly GAME_ACTIVE_FILE="${STATE_DIR}/game-active"
+readonly LOCK_FILE="/run/lock/${APP_NAME}.lock"
+readonly PRODUCT_FILE="/sys/class/dmi/id/product_name"
+readonly VENDOR_FILE="/sys/class/dmi/id/sys_vendor"
+readonly TEMP_FILE="${SYSFS_BASE}/cpu/realtime_temperature"
+readonly SHIFT_FILE="${SYSFS_BASE}/shift_mode"
+readonly FAN_FILE="${SYSFS_BASE}/fan_mode"
+readonly BOOST_FILE="${SYSFS_BASE}/cooler_boost"
+readonly BATTERY_FILE="${SYSFS_BASE}/super_battery"
+readonly POWERPROFILESCTL="/usr/bin/powerprofilesctl"
+readonly PROFILE_ORDER=(super-battery silent balanced performance)
+readonly BOOST_ON_TEMP=90
+readonly BOOST_OFF_TEMP=75
+readonly EMERGENCY_TEMP=97
+
+die()
+{
+	printf 'error\tunknown\t0\tunknown\tunknown\t%s\n' "$*"
+	exit 1
+}
+
+read_one_line()
+{
+	local value
+	IFS= read -r value < "$1"
+	printf '%s' "$value"
+}
+
+validate_system()
+{
+	[[ $(read_one_line "$VENDOR_FILE") == "Micro-Star International Co., Ltd." ]] ||
+		die "unsupported vendor"
+	[[ $(read_one_line "$PRODUCT_FILE") == "Thin GF63 12VE" ]] ||
+		die "unsupported model"
+	[[ -r "${SYSFS_BASE}/fw_version" ]] || die "msi-ec is not loaded"
+	[[ $(read_one_line "${SYSFS_BASE}/fw_version") == "16R8IMS1.107" ]] ||
+		die "unsupported EC firmware"
+	[[ -w "$SHIFT_FILE" && -w "$FAN_FILE" && -w "$BOOST_FILE" && -w "$BATTERY_FILE" ]] ||
+		die "msi-ec controls are not writable"
+	grep -Fxq 'eco' "${SYSFS_BASE}/available_shift_modes" || die "eco mode is unavailable"
+	grep -Fxq 'comfort' "${SYSFS_BASE}/available_shift_modes" || die "comfort mode is unavailable"
+	grep -Fxq 'turbo' "${SYSFS_BASE}/available_shift_modes" || die "turbo mode is unavailable"
+	grep -Fxq 'auto' "${SYSFS_BASE}/available_fan_modes" || die "auto fan mode is unavailable"
+	grep -Fxq 'silent' "${SYSFS_BASE}/available_fan_modes" || die "silent fan mode is unavailable"
+}
+
+temperature()
+{
+	local temp
+	temp=$(read_one_line "$TEMP_FILE")
+	[[ $temp =~ ^[0-9]+$ ]] || die "invalid CPU temperature"
+	printf '%s' "$temp"
+}
+
+current_profile()
+{
+	local shift
+
+	# Derive the profile from hardware, not a possibly stale state file.
+	shift=$(read_one_line "$SHIFT_FILE")
+	case "$shift" in
+		eco)
+			if [[ $(read_one_line "$BATTERY_FILE") == on ]]; then
+				printf 'super-battery'
+			else
+				printf 'silent'
+			fi
+			;;
+		comfort) printf 'balanced' ;;
+		turbo) printf 'performance' ;;
+		*) printf 'balanced' ;;
+	esac
+}
+
+next_profile()
+{
+	local current=$1 i count=${#PROFILE_ORDER[@]}
+
+	for i in "${!PROFILE_ORDER[@]}"; do
+		if [[ ${PROFILE_ORDER[i]} == "$current" ]]; then
+			printf '%s' "${PROFILE_ORDER[(i + 1) % count]}"
+			return
+		fi
+	done
+	printf 'balanced'
+}
+
+write_value()
+{
+	printf '%s\n' "$2" > "$1"
+}
+
+set_power_profile()
+{
+	if [[ -x $POWERPROFILESCTL ]]; then
+		"$POWERPROFILESCTL" set "$1" ||
+			logger -p user.warning -t "$APP_NAME" \
+				"power-profiles-daemon rejected profile $1"
+	fi
+}
+
+record_state()
+{
+	printf '%s\n' "$1" > "$STATE_FILE"
+}
+
+# Cooler Boost hysteresis for the non-performance profiles: turn it on
+# above BOOST_ON_TEMP, keep it running until we cool below BOOST_OFF_TEMP.
+resolve_boost()
+{
+	local temp=$1 current_boost=$2
+
+	if (( temp >= BOOST_ON_TEMP )) ||
+		{ [[ $current_boost == on ]] && (( temp > BOOST_OFF_TEMP )); }; then
+		printf 'on'
+	else
+		printf 'off'
+	fi
+}
+
+apply_profile()
+{
+	local profile=$1
+	local temp=$2
+	local boost fan
+
+	case "$profile" in
+		super-battery)
+			fan=silent
+			boost=$(resolve_boost "$temp" "$(read_one_line "$BOOST_FILE")")
+			write_value "$SHIFT_FILE" eco
+			write_value "$FAN_FILE" silent
+			write_value "$BATTERY_FILE" on
+			write_value "$BOOST_FILE" "$boost"
+			set_power_profile power-saver
+			;;
+		silent)
+			fan=silent
+			boost=$(resolve_boost "$temp" "$(read_one_line "$BOOST_FILE")")
+			write_value "$SHIFT_FILE" eco
+			write_value "$FAN_FILE" silent
+			# After the shift write: on this EC, entering eco can flip the
+			# super_battery bit on by itself.
+			write_value "$BATTERY_FILE" off
+			write_value "$BOOST_FILE" "$boost"
+			set_power_profile power-saver
+			;;
+		balanced)
+			fan=auto
+			boost=$(resolve_boost "$temp" "$(read_one_line "$BOOST_FILE")")
+			write_value "$BATTERY_FILE" off
+			write_value "$SHIFT_FILE" comfort
+			write_value "$FAN_FILE" auto
+			write_value "$BOOST_FILE" "$boost"
+			set_power_profile balanced
+			;;
+		performance)
+			fan=auto
+			boost=on
+			write_value "$BATTERY_FILE" off
+			write_value "$SHIFT_FILE" turbo
+			write_value "$FAN_FILE" auto
+			write_value "$BOOST_FILE" on
+			set_power_profile performance
+			;;
+		*)
+			die "invalid profile"
+			;;
+	esac
+
+	record_state "$profile"
+	printf 'applied\t%s\t%s\t%s\t%s\tok\n' "$profile" "$temp" "$fan" "$boost"
+}
+
+game_start()
+{
+	local output
+
+	# This is deliberately temperature-independent: while a game is active,
+	# the EC stays in Turbo and Cooler Boost stays at maximum. Firmware thermal
+	# throttling and emergency shutdown protections remain untouched.
+	output=$(apply_profile performance "$(temperature)")
+	printf 'active\n' > "$GAME_ACTIVE_FILE"
+	printf '%s\n' "${output%ok}Oyun algılandı: Performans kilitli"
+}
+
+game_stop()
+{
+	local output
+
+	rm -f "$GAME_ACTIVE_FILE"
+	output=$(apply_profile balanced "$(temperature)")
+	printf '%s\n' "${output%ok}Oyun kapandı: Dengeli moda dönüldü"
+}
+
+set_profile()
+{
+	apply_profile "$1" "$(temperature)"
+}
+
+thermal_guard()
+{
+	local temp profile boost
+
+	# Never make heat-based profile/fan decisions while the game lock is set.
+	# Only repair accidental drift from the fixed Turbo + Cooler Boost state.
+	if [[ -e $GAME_ACTIVE_FILE ]]; then
+		if [[ $(current_profile) != performance ]] ||
+			[[ $(read_one_line "$SHIFT_FILE") != turbo ]] ||
+			[[ $(read_one_line "$FAN_FILE") != auto ]] ||
+			[[ $(read_one_line "$BOOST_FILE") != on ]]; then
+			apply_profile performance "$(temperature)" >/dev/null
+		fi
+		status
+		return
+	fi
+
+	temp=$(temperature)
+	profile=$(current_profile)
+	boost=$(read_one_line "$BOOST_FILE")
+
+	# The chosen profile is never overridden; safety comes from the fans
+	# alone. Cooler Boost is forced on above BOOST_ON_TEMP and the CPU's
+	# own throttling handles the rest.
+	if (( temp >= EMERGENCY_TEMP )); then
+		if [[ $boost != on ]]; then
+			write_value "$BOOST_FILE" on
+		fi
+		logger -p user.warning -t "$APP_NAME" \
+			"CPU ${temp} C is critically hot; Cooler Boost forced on, profile kept"
+	elif (( temp >= BOOST_ON_TEMP )) && [[ $boost != on ]]; then
+		write_value "$BOOST_FILE" on
+		logger -t "$APP_NAME" "CPU ${temp} C; enabled Cooler Boost"
+	elif (( temp <= BOOST_OFF_TEMP )) && [[ $profile != performance && $boost != off ]]; then
+		write_value "$BOOST_FILE" off
+		logger -t "$APP_NAME" "CPU ${temp} C; disabled Cooler Boost"
+	fi
+
+	status
+}
+
+status()
+{
+	printf 'status\t%s\t%s\t%s\t%s\tok\n' \
+		"$(current_profile)" "$(temperature)" \
+		"$(read_one_line "$FAN_FILE")" "$(read_one_line "$BOOST_FILE")"
+}
+
+main()
+{
+	local output
+
+	if [[ ${1:-} == --version || ${1:-} == version ]]; then
+		printf '%s %s\n' "$APP_NAME" "$APP_VERSION"
+		return
+	fi
+
+	[[ ${EUID} -eq 0 ]] || die "root privileges required"
+	umask 077
+	install -d -m 0755 "$STATE_DIR"
+	exec 9> "$LOCK_FILE"
+	flock -x 9
+	validate_system
+
+	case "${1:-}" in
+		set)
+			case "${2:-}" in
+				super-battery|silent|balanced|performance) ;;
+				*) die "usage: ${APP_NAME} set {super-battery|silent|balanced|performance}" ;;
+			esac
+			if [[ -e $GAME_ACTIVE_FILE && $2 != performance ]]; then
+				output=$(apply_profile performance "$(temperature)")
+				output="${output%ok}Oyun açık: Performans kilitli"
+			else
+				output=$(set_profile "$2")
+			fi
+			printf '%s\n' "$output" > "$RESULT_FILE"
+			chmod 0644 "$RESULT_FILE"
+			printf '%s\n' "$output"
+			;;
+		cycle)
+			if [[ -e $GAME_ACTIVE_FILE ]]; then
+				output=$(apply_profile performance "$(temperature)")
+				output="${output%ok}Oyun açık: Performans kilitli"
+			else
+				output=$(set_profile "$(next_profile "$(current_profile)")")
+			fi
+			printf '%s\n' "$output" > "$RESULT_FILE"
+			chmod 0644 "$RESULT_FILE"
+			printf '%s\n' "$output"
+			;;
+		game-start)
+			output=$(game_start)
+			printf '%s\n' "$output" > "$RESULT_FILE"
+			chmod 0644 "$RESULT_FILE"
+			printf '%s\n' "$output"
+			;;
+		game-stop)
+			output=$(game_stop)
+			printf '%s\n' "$output" > "$RESULT_FILE"
+			chmod 0644 "$RESULT_FILE"
+			printf '%s\n' "$output"
+			;;
+		guard) thermal_guard ;;
+		status) status ;;
+		*) die "usage: ${APP_NAME} {set <profile>|cycle|game-start|game-stop|guard|status|version}" ;;
+	esac
+}
+
+main "$@"

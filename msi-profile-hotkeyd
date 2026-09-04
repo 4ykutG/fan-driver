@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""MSI GF63 hotkey daemon.
+
+Listens for the Fn+F7 key (KEY_PROG3, remapped from scancode 0x91 by the
+hwdb entry) straight from the kernel input devices, so it works on every
+desktop environment and on the console. Repeated presses move an MSI
+Center-style selection through the four profiles; when the key has been
+quiet for COMMIT_DELAY seconds the highlighted profile is applied through
+msi-profile-control. The thermal guard runs periodically from here too.
+
+State for on-screen displays is published atomically as one JSON object
+in /run/msi-profile-control/osd-state. Steam games are detected from their
+process environment and executable path; while one is running the backend is
+locked to the fixed performance profile.
+"""
+
+import json
+import os
+import selectors
+import struct
+import subprocess
+import sys
+import syslog
+import time
+
+KEY_PROG3 = 202
+EV_KEY = 1
+KEY_DOWN = 1
+INPUT_EVENT = struct.Struct('llHHi')
+
+BACKEND = '/usr/local/sbin/msi-profile-control'
+STATE_DIR = '/run/msi-profile-control'
+OSD_STATE_FILE = os.path.join(STATE_DIR, 'osd-state')
+GAME_ACTIVE_FILE = os.path.join(STATE_DIR, 'game-active')
+GAME_LIST_FILE = os.environ.get(
+    'MSI_PROFILE_GAME_LIST', '/etc/msi-profile-games.conf')
+PROC_ROOT = os.environ.get('MSI_PROFILE_PROC_ROOT', '/proc')
+
+PROFILE_ORDER = ('super-battery', 'silent', 'balanced', 'performance')
+
+COMMIT_DELAY = 0.9
+PRESS_DEBOUNCE = 0.12
+GUARD_INTERVAL = 15.0
+RESCAN_INTERVAL = 30.0
+GAME_SCAN_INTERVAL = 2.0
+GAME_EXIT_DELAY = 8.0
+
+STEAM_PATH_MARKER = '/steamapps/common/'
+STEAM_RUNTIME_MARKERS = (
+    '/steamapps/common/steamlinuxruntime',
+    '/steamapps/common/proton ',
+)
+STEAM_HELPERS = {
+    'steam', 'steamwebhelper', 'reaper', 'pressure-vessel-wrap',
+    'pressure-vessel-adverb', 'pv-bwrap', 'steam-runtime-launcher-service',
+}
+
+
+def log(message, priority=syslog.LOG_INFO):
+    syslog.syslog(priority, message)
+
+
+def find_prog3_devices():
+    """Return event device paths whose key capability includes KEY_PROG3."""
+    devices = []
+    base = '/sys/class/input'
+    try:
+        entries = sorted(os.listdir(base))
+    except OSError:
+        return devices
+    for entry in entries:
+        if not entry.startswith('event'):
+            continue
+        cap_path = os.path.join(base, entry, 'device', 'capabilities', 'key')
+        try:
+            with open(cap_path, encoding='ascii') as cap_file:
+                words = cap_file.read().split()
+        except OSError:
+            continue
+        # The bitmap is printed most-significant word first, 64 bits a word.
+        words.reverse()
+        word, bit = divmod(KEY_PROG3, 64)
+        if word < len(words) and (int(words[word], 16) >> bit) & 1:
+            devices.append(os.path.join('/dev/input', entry))
+    return devices
+
+
+def run_backend(*args):
+    """Run msi-profile-control and parse its tab-separated result line."""
+    try:
+        completed = subprocess.run(
+            [BACKEND, *args],
+            capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        log(f'backend {args[0]} failed: {error}', syslog.LOG_ERR)
+        return None
+    line = completed.stdout.strip().splitlines()
+    fields = line[-1].split('\t') if line else []
+    if len(fields) != 6:
+        log(f'backend {args[0]} produced no result: '
+            f'{completed.stderr.strip() or completed.stdout.strip()}',
+            syslog.LOG_ERR)
+        return None
+    result = {
+        'result': fields[0],
+        'profile': fields[1],
+        'temp': fields[2],
+        'fan': fields[3],
+        'boost': fields[4],
+        'message': fields[5],
+    }
+    if result['result'] == 'error':
+        log(f'backend {args[0]} error: {result["message"]}', syslog.LOG_ERR)
+        return None
+    return result
+
+
+def read_configured_games():
+    """Return explicitly configured executable names, one per line."""
+    games = {'cs2'}
+    try:
+        with open(GAME_LIST_FILE, encoding='utf-8') as game_file:
+            for line in game_file:
+                name = line.split('#', 1)[0].strip()
+                if name and '/' not in name:
+                    games.add(name)
+    except OSError:
+        pass
+    return games
+
+
+def read_proc_file(pid, name, binary=False, limit=262144):
+    mode = 'rb' if binary else 'r'
+    kwargs = {} if binary else {'encoding': 'utf-8', 'errors': 'replace'}
+    try:
+        with open(os.path.join(PROC_ROOT, str(pid), name), mode,
+                  **kwargs) as proc_file:
+            return proc_file.read(limit)
+    except (OSError, ProcessLookupError):
+        return b'' if binary else ''
+
+
+def process_game_label(pid, configured_games):
+    """Return a label when pid looks like a real game, otherwise None."""
+    try:
+        exe = os.readlink(os.path.join(PROC_ROOT, str(pid), 'exe'))
+    except OSError:
+        exe = ''
+    basename = os.path.basename(exe).removesuffix(' (deleted)')
+    if basename in configured_games:
+        return basename
+
+    lower_exe = exe.lower()
+    if STEAM_PATH_MARKER in lower_exe:
+        if basename.lower() in STEAM_HELPERS:
+            return None
+        if not any(marker in lower_exe for marker in STEAM_RUNTIME_MARKERS):
+            return basename or 'Steam oyunu'
+
+    environ = read_proc_file(pid, 'environ', binary=True)
+    if not environ:
+        return None
+    app_id = None
+    for item in environ.split(b'\0'):
+        if item.startswith((b'SteamGameId=', b'SteamAppId=')):
+            value = item.partition(b'=')[2]
+            if value.isdigit() and value != b'0':
+                app_id = value.decode('ascii')
+                break
+    if app_id is None or basename.lower() in STEAM_HELPERS:
+        return None
+
+    # Proton's Wine process lives in a runtime path rather than the game's
+    # directory. A non-zero Steam app id distinguishes it from Steam itself.
+    cmdline = read_proc_file(pid, 'cmdline', binary=True).replace(b'\0', b' ')
+    if (STEAM_PATH_MARKER.encode() in cmdline.lower() or
+            b'/compatdata/' in cmdline.lower() or
+            basename.startswith(('wine', 'proton'))):
+        return f'Steam {app_id}'
+    return None
+
+
+def running_games():
+    configured = read_configured_games()
+    found = set()
+    try:
+        pids = (entry for entry in os.listdir(PROC_ROOT) if entry.isdigit())
+        for pid in pids:
+            label = process_game_label(pid, configured)
+            if label:
+                found.add(label)
+    except OSError:
+        pass
+    return sorted(found)
+
+
+class HotkeyDaemon:
+    def __init__(self):
+        self.selector = selectors.DefaultSelector()
+        self.open_devices = {}
+        self.sequence = 0
+        self.current = 'balanced'
+        self.pending = None
+        self.commit_at = None
+        self.guard_at = time.monotonic() + GUARD_INTERVAL
+        self.rescan_at = 0.0
+        self.game_scan_at = 0.0
+        self.game_active = os.path.exists(GAME_ACTIVE_FILE)
+        self.game_missing_since = None
+        self.last_press = 0.0
+
+    def publish(self, phase, **extra):
+        self.sequence += 1
+        state = {'phase': phase, 'seq': self.sequence, 'ts': time.time()}
+        state.update(extra)
+        os.makedirs(STATE_DIR, exist_ok=True)
+        temp_path = OSD_STATE_FILE + '.tmp'
+        with open(temp_path, 'w', encoding='utf-8') as state_file:
+            json.dump(state, state_file, ensure_ascii=False)
+            state_file.write('\n')
+        os.chmod(temp_path, 0o644)
+        os.replace(temp_path, OSD_STATE_FILE)
+
+    def open_input_devices(self):
+        wanted = find_prog3_devices()
+        for path in wanted:
+            if path in self.open_devices:
+                continue
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError as error:
+                log(f'cannot open {path}: {error}', syslog.LOG_WARNING)
+                continue
+            self.selector.register(fd, selectors.EVENT_READ, path)
+            self.open_devices[path] = fd
+            log(f'listening for KEY_PROG3 on {path}')
+        self.rescan_at = time.monotonic() + RESCAN_INTERVAL
+
+    def close_device(self, path):
+        fd = self.open_devices.pop(path, None)
+        if fd is None:
+            return
+        try:
+            self.selector.unregister(fd)
+        except KeyError:
+            pass
+        os.close(fd)
+        log(f'stopped listening on {path}', syslog.LOG_WARNING)
+
+    def drain_device(self, fd, path):
+        pressed = False
+        while True:
+            try:
+                chunk = os.read(fd, INPUT_EVENT.size * 64)
+            except BlockingIOError:
+                break
+            except OSError:
+                self.close_device(path)
+                return False
+            if not chunk:
+                self.close_device(path)
+                return False
+            for offset in range(0, len(chunk) - INPUT_EVENT.size + 1,
+                                INPUT_EVENT.size):
+                _sec, _usec, ev_type, code, value = INPUT_EVENT.unpack_from(
+                    chunk, offset)
+                if ev_type == EV_KEY and code == KEY_PROG3 and value == KEY_DOWN:
+                    pressed = True
+        return pressed
+
+    def handle_press(self):
+        now = time.monotonic()
+        if now - self.last_press < PRESS_DEBOUNCE:
+            return
+        self.last_press = now
+
+        if self.game_active:
+            result = run_backend('status')
+            if result is not None:
+                result['message'] = 'Oyun açık: Performans kilitli'
+                self.publish('applied', profile=result['profile'],
+                             temp=result['temp'], fan=result['fan'],
+                             boost=result['boost'], message=result['message'])
+            return
+
+        if self.pending is None:
+            base = self.current
+        else:
+            base = self.pending
+        index = PROFILE_ORDER.index(base) if base in PROFILE_ORDER else 1
+        self.pending = PROFILE_ORDER[(index + 1) % len(PROFILE_ORDER)]
+        self.commit_at = now + COMMIT_DELAY
+        self.publish('preview', selected=self.pending, current=self.current)
+
+    def commit(self):
+        target, self.pending, self.commit_at = self.pending, None, None
+        result = run_backend('set', target)
+        if result is None:
+            self.publish('error', message='Profil uygulanamadı')
+            return
+        self.current = result['profile']
+        self.publish('applied', profile=result['profile'], temp=result['temp'],
+                     fan=result['fan'], boost=result['boost'],
+                     message=result['message'])
+
+    def run_guard(self):
+        self.guard_at = time.monotonic() + GUARD_INTERVAL
+        if self.pending is not None:
+            return
+        result = run_backend('guard')
+        if result is not None:
+            self.current = result['profile']
+
+    def sync_current(self):
+        result = run_backend('status')
+        if result is not None:
+            self.current = result['profile']
+
+    def scan_game_state(self):
+        self.game_scan_at = time.monotonic() + GAME_SCAN_INTERVAL
+        games = running_games()
+        now = time.monotonic()
+
+        if games:
+            self.game_missing_since = None
+            if not self.game_active:
+                result = run_backend('game-start')
+                if result is None:
+                    self.publish('error', message='Oyun modu açılamadı')
+                    return
+                self.game_active = True
+                self.current = result['profile']
+                self.pending = None
+                self.commit_at = None
+                result['message'] = f'Oyun modu: {games[0]}'
+                self.publish('applied', profile=result['profile'],
+                             temp=result['temp'], fan=result['fan'],
+                             boost=result['boost'], message=result['message'])
+                log(f'game detected ({", ".join(games)}); performance locked')
+            return
+
+        if not self.game_active:
+            return
+        if self.game_missing_since is None:
+            self.game_missing_since = now
+            return
+        if now - self.game_missing_since < GAME_EXIT_DELAY:
+            return
+
+        result = run_backend('game-stop')
+        if result is None:
+            self.publish('error', message='Dengeli moda dönülemedi')
+            return
+        self.game_active = False
+        self.game_missing_since = None
+        self.current = result['profile']
+        result['message'] = 'Oyun kapandı: Dengeli mod'
+        self.publish('applied', profile=result['profile'], temp=result['temp'],
+                     fan=result['fan'], boost=result['boost'],
+                     message=result['message'])
+        log('last game exited; balanced profile restored')
+
+    def run(self):
+        syslog.openlog('msi-profile-hotkeyd')
+        self.sync_current()
+        self.open_input_devices()
+        if not self.open_devices:
+            log('no input device exposes KEY_PROG3 yet; will keep scanning',
+                syslog.LOG_WARNING)
+
+        while True:
+            now = time.monotonic()
+            deadlines = [self.guard_at, self.rescan_at, self.game_scan_at]
+            if self.commit_at is not None:
+                deadlines.append(self.commit_at)
+            timeout = max(0.0, min(deadlines) - now)
+
+            pressed = False
+            for key, _mask in self.selector.select(timeout):
+                if self.drain_device(key.fd, key.data):
+                    pressed = True
+            if pressed:
+                self.handle_press()
+
+            now = time.monotonic()
+            if self.commit_at is not None and now >= self.commit_at:
+                self.commit()
+            if now >= self.guard_at:
+                self.run_guard()
+            if now >= self.rescan_at:
+                self.open_input_devices()
+            if now >= self.game_scan_at:
+                self.scan_game_state()
+
+
+def main():
+    if os.geteuid() != 0:
+        print('msi-profile-hotkeyd must run as root', file=sys.stderr)
+        return 1
+    HotkeyDaemon().run()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

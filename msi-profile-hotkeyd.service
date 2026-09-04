@@ -1,0 +1,27 @@
+[Unit]
+Description=MSI GF63 Fn+F7 profile hotkey daemon
+ConditionPathExists=/sys/devices/platform/msi-ec/shift_mode
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/msi-profile-hotkeyd
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=msi-profile-control
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+ReadWritePaths=/sys/devices/platform/msi-ec /run/msi-profile-control /run/lock
+
+[Install]
+WantedBy=multi-user.target
