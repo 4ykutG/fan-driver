@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: New model or firmware support
+    url: https://github.com/BeardOverflow/msi-ec/issues/new/choose
+    about: Establish support in the upstream msi-ec project first.
+  - name: Private security report
+    url: https://github.com/4ykutG/fan-driver/security/advisories/new
+    about: Report vulnerabilities without exposing sensitive information.

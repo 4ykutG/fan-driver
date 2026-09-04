@@ -137,7 +137,8 @@ make test
 ```
 
 See [architecture and safety notes](docs/architecture.md) and
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). Planned work is tracked in
+[ROADMAP.md](ROADMAP.md).
 
 ## License
 
