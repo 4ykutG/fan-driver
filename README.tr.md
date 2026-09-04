@@ -42,6 +42,12 @@ değiştirilmeden önce zaman damgalı yedek alınır.
 Steam dışı oyunların çalıştırılabilir dosya adlarını
 `/etc/msi-profile-games.conf` dosyasına birer satır olarak ekleyebilirsiniz.
 
+Destek isterken kişisel veri toplamayan salt-okunur tanı çıktısı:
+
+```bash
+msi-profile-doctor --json
+```
+
 ## Kaldırma ve test
 
 ```bash

@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Read-only support report for MSI GF63 Auto Profile."""
+
+import argparse
+import json
+import os
+import pathlib
+import platform
+import subprocess
+
+VERSION = '0.1.0'
+ROOT = pathlib.Path(os.environ.get('MSI_PROFILE_DOCTOR_ROOT', '/'))
+
+
+def rooted(path):
+    return ROOT / path.lstrip('/')
+
+
+def read(path):
+    try:
+        return rooted(path).read_text(encoding='utf-8').strip()
+    except OSError:
+        return None
+
+
+def exists(path):
+    return rooted(path).exists()
+
+
+def run(*command, allow_failure=False):
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 and not allow_failure:
+        return None
+    output = result.stdout.strip()
+    return output if output else None
+
+
+def package_version(name):
+    output = run('pacman', '-Q', name)
+    if not output:
+        return None
+    fields = output.split(maxsplit=1)
+    return fields[1] if len(fields) == 2 else output
+
+
+def hwmon_cpu_fan_rpm():
+    base = rooted('/sys/class/hwmon')
+    try:
+        devices = base.glob('hwmon*')
+        for device in devices:
+            try:
+                if (device / 'name').read_text().strip() == 'msi_wmi_platform':
+                    return (device / 'fan1_input').read_text().strip()
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return None
+
+
+def build_report():
+    base = '/sys/devices/platform/msi-ec'
+    vendor = read('/sys/class/dmi/id/sys_vendor')
+    model = read('/sys/class/dmi/id/product_name')
+    firmware = read(f'{base}/fw_version')
+    supported = (
+        vendor == 'Micro-Star International Co., Ltd.' and
+        model == 'Thin GF63 12VE' and
+        firmware == '16R8IMS1.107')
+
+    return {
+        'privacy': 'No username, hostname, serial number, Steam data or tokens collected',
+        'software': {'version': VERSION},
+        'os': {
+            'kernel': platform.release(),
+            'architecture': platform.machine(),
+        },
+        'hardware': {
+            'vendor': vendor,
+            'model': model,
+            'ec_firmware': firmware,
+            'supported': supported,
+        },
+        'ec': {
+            'driver_loaded': exists(base),
+            'shift_mode': read(f'{base}/shift_mode'),
+            'fan_mode': read(f'{base}/fan_mode'),
+            'cooler_boost': read(f'{base}/cooler_boost'),
+            'super_battery': read(f'{base}/super_battery'),
+            'cpu_temperature_c': read(f'{base}/cpu/realtime_temperature'),
+            'ec_cpu_fan_percent': read(f'{base}/cpu/realtime_fan_speed'),
+            'cpu_fan_rpm': hwmon_cpu_fan_rpm(),
+            'gpu_temperature_c': read(f'{base}/gpu/realtime_temperature'),
+            'ec_gpu_fan_percent': read(f'{base}/gpu/realtime_fan_speed'),
+            'available_shift_modes': read(f'{base}/available_shift_modes'),
+            'available_fan_modes': read(f'{base}/available_fan_modes'),
+        },
+        'runtime': {
+            'service_active': run(
+                'systemctl', 'is-active', 'msi-profile-hotkeyd.service',
+                allow_failure=True),
+            'game_lock': exists('/run/msi-profile-control/game-active'),
+            'power_profile': run('powerprofilesctl', 'get'),
+        },
+        'packages': {
+            name: package_version(name) for name in (
+                'msi-ec-dkms-git', 'gamemode', 'lib32-gamemode', 'mangohud',
+                'nvidia-utils', 'nvidia-prime')
+        },
+        'nvidia': run(
+            'nvidia-smi',
+            '--query-gpu=name,driver_version,power.limit,temperature.gpu',
+            '--format=csv,noheader,nounits'),
+    }
+
+
+def flatten(value, prefix=''):
+    for key, child in value.items():
+        name = f'{prefix}.{key}' if prefix else key
+        if isinstance(child, dict):
+            yield from flatten(child, name)
+        else:
+            if child is None:
+                child = 'unavailable'
+            elif isinstance(child, bool):
+                child = str(child).lower()
+            yield name, str(child).replace('\n', ',')
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Generate a privacy-safe, read-only support report.')
+    parser.add_argument('--json', action='store_true', help='emit JSON')
+    args = parser.parse_args()
+    report = build_report()
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        print('MSI GF63 Auto Profile doctor')
+        for key, value in flatten(report):
+            print(f'{key}: {value}')
+    return 0 if report['hardware']['supported'] else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

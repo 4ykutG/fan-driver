@@ -97,7 +97,11 @@ sudo msi-profile-control status
 sudo msi-profile-control set balanced
 sudo msi-profile-control set performance
 journalctl -u msi-profile-hotkeyd.service
+msi-profile-doctor
 ```
+
+`msi-profile-doctor --json` produces a read-only support report without a
+username, hostname, serial number, Steam data, process environment or token.
 
 Native Steam and Proton games are detected automatically. For a non-Steam
 game, add its executable basename to `/etc/msi-profile-games.conf`, one name

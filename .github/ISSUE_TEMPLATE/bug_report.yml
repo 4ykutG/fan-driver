@@ -36,3 +36,8 @@ body:
       label: Steps to reproduce
     validations:
       required: true
+  - type: textarea
+    attributes:
+      label: Doctor output
+      description: Paste the output of msi-profile-doctor --json.
+      render: json
