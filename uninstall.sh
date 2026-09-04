@@ -18,6 +18,7 @@ rm -f /usr/local/sbin/msi-profile-control \
 	/usr/local/sbin/msi-profile-hotkeyd \
 	/usr/local/bin/msi-profile-osd \
 	/usr/local/bin/msi-profile-doctor \
+	/usr/local/bin/msi-profile-monitor \
 	/usr/local/bin/msi-game-run \
 	/etc/systemd/system/msi-profile-hotkeyd.service \
 	/etc/systemd/user/msi-profile-osd.service \

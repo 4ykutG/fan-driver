@@ -53,6 +53,12 @@ Destek isterken kişisel veri toplamayan salt-okunur tanı çıktısı:
 msi-profile-doctor --json
 ```
 
+Kişisel veri veya süreç adı içermeyen 60 saniyelik sıcaklık/GPU kaydı:
+
+```bash
+msi-profile-monitor --duration 60 --output cs2-session.csv
+```
+
 ## Kaldırma ve test
 
 ```bash

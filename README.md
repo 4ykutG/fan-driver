@@ -103,6 +103,14 @@ msi-profile-doctor
 `msi-profile-doctor --json` produces a read-only support report without a
 username, hostname, serial number, Steam data, process environment or token.
 
+Record a 60-second thermal/GPU session without process names or identity data:
+
+```bash
+msi-profile-monitor --duration 60 --output cs2-session.csv
+```
+
+The recorder refuses to overwrite an existing file unless `--force` is given.
+
 Native Steam and Proton games are detected automatically. For a non-Steam
 game, add its executable basename to `/etc/msi-profile-games.conf`, one name
 per line.

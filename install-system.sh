@@ -32,6 +32,8 @@ install -Dm0755 "${SOURCE_DIR}/msi-profile-osd" \
 	/usr/local/bin/msi-profile-osd
 install -Dm0755 "${SOURCE_DIR}/msi-profile-doctor" \
 	/usr/local/bin/msi-profile-doctor
+install -Dm0755 "${SOURCE_DIR}/msi-profile-monitor" \
+	/usr/local/bin/msi-profile-monitor
 install -Dm0644 "${SOURCE_DIR}/msi-profile-hotkeyd.service" \
 	/etc/systemd/system/msi-profile-hotkeyd.service
 install -Dm0644 "${SOURCE_DIR}/msi-profile-osd.service" \
@@ -63,3 +65,4 @@ printf '\nInstalled successfully.\n'
 printf 'GNOME users: gnome-extensions enable %s\n' "$EXTENSION_UUID"
 printf 'Other desktops: log out/in once to start the GTK OSD.\n'
 printf 'Support report: msi-profile-doctor\n'
+printf 'Telemetry capture: msi-profile-monitor --duration 60 -o session.csv\n'
