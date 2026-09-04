@@ -1,6 +1,6 @@
 # MSI GF63 Auto Profile
 
-[![Tests](https://github.com/4ykutG/msi-gf63-auto-profile/actions/workflows/test.yml/badge.svg)](https://github.com/4ykutG/msi-gf63-auto-profile/actions/workflows/test.yml)
+[![Tests](https://github.com/4ykutG/fan-driver/actions/workflows/test.yml/badge.svg)](https://github.com/4ykutG/fan-driver/actions/workflows/test.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 
 An open-source MSI Center-style profile controller for the **MSI Thin GF63
@@ -58,8 +58,8 @@ continues to operate normally.
 Inspect the scripts first, then run:
 
 ```bash
-git clone https://github.com/4ykutG/msi-gf63-auto-profile.git
-cd msi-gf63-auto-profile
+git clone https://github.com/4ykutG/fan-driver.git
+cd fan-driver
 sudo ./install-system.sh
 ```
 

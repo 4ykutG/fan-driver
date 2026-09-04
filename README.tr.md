@@ -24,8 +24,8 @@ alanı denetleyicisidir.
 ## Kurulum
 
 ```bash
-git clone https://github.com/4ykutG/msi-gf63-auto-profile.git
-cd msi-gf63-auto-profile
+git clone https://github.com/4ykutG/fan-driver.git
+cd fan-driver
 sudo ./install-system.sh
 gnome-extensions enable msi-gf63-profile-osd@4ykutg.github.io
 ```
