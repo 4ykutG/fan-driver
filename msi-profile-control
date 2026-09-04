@@ -4,20 +4,20 @@ set -Eeuo pipefail
 
 readonly APP_NAME="msi-profile-control"
 readonly APP_VERSION="0.1.0"
-readonly SYSFS_BASE="/sys/devices/platform/msi-ec"
-readonly STATE_DIR="/run/${APP_NAME}"
+readonly SYSFS_BASE="${MSI_PROFILE_SYSFS_BASE:-/sys/devices/platform/msi-ec}"
+readonly STATE_DIR="${MSI_PROFILE_STATE_DIR:-/run/${APP_NAME}}"
 readonly STATE_FILE="${STATE_DIR}/state"
 readonly RESULT_FILE="${STATE_DIR}/last-result"
 readonly GAME_ACTIVE_FILE="${STATE_DIR}/game-active"
-readonly LOCK_FILE="/run/lock/${APP_NAME}.lock"
-readonly PRODUCT_FILE="/sys/class/dmi/id/product_name"
-readonly VENDOR_FILE="/sys/class/dmi/id/sys_vendor"
+readonly LOCK_FILE="${MSI_PROFILE_LOCK_FILE:-/run/lock/${APP_NAME}.lock}"
+readonly PRODUCT_FILE="${MSI_PROFILE_PRODUCT_FILE:-/sys/class/dmi/id/product_name}"
+readonly VENDOR_FILE="${MSI_PROFILE_VENDOR_FILE:-/sys/class/dmi/id/sys_vendor}"
 readonly TEMP_FILE="${SYSFS_BASE}/cpu/realtime_temperature"
 readonly SHIFT_FILE="${SYSFS_BASE}/shift_mode"
 readonly FAN_FILE="${SYSFS_BASE}/fan_mode"
 readonly BOOST_FILE="${SYSFS_BASE}/cooler_boost"
 readonly BATTERY_FILE="${SYSFS_BASE}/super_battery"
-readonly POWERPROFILESCTL="/usr/bin/powerprofilesctl"
+readonly POWERPROFILESCTL="${MSI_PROFILE_POWERPROFILESCTL:-/usr/bin/powerprofilesctl}"
 readonly PROFILE_ORDER=(super-battery silent balanced performance)
 readonly BOOST_ON_TEMP=90
 readonly BOOST_OFF_TEMP=75
@@ -34,6 +34,16 @@ read_one_line()
 	local value
 	IFS= read -r value < "$1"
 	printf '%s' "$value"
+}
+
+log_info()
+{
+	logger -t "$APP_NAME" -- "$*" 2>/dev/null || true
+}
+
+log_warning()
+{
+	logger -p user.warning -t "$APP_NAME" -- "$*" 2>/dev/null || true
 }
 
 validate_system()
@@ -104,8 +114,7 @@ set_power_profile()
 {
 	if [[ -x $POWERPROFILESCTL ]]; then
 		"$POWERPROFILESCTL" set "$1" ||
-			logger -p user.warning -t "$APP_NAME" \
-				"power-profiles-daemon rejected profile $1"
+			log_warning "power-profiles-daemon rejected profile $1"
 	fi
 }
 
@@ -236,14 +245,14 @@ thermal_guard()
 		if [[ $boost != on ]]; then
 			write_value "$BOOST_FILE" on
 		fi
-		logger -p user.warning -t "$APP_NAME" \
+		log_warning \
 			"CPU ${temp} C is critically hot; Cooler Boost forced on, profile kept"
 	elif (( temp >= BOOST_ON_TEMP )) && [[ $boost != on ]]; then
 		write_value "$BOOST_FILE" on
-		logger -t "$APP_NAME" "CPU ${temp} C; enabled Cooler Boost"
+		log_info "CPU ${temp} C; enabled Cooler Boost"
 	elif (( temp <= BOOST_OFF_TEMP )) && [[ $profile != performance && $boost != off ]]; then
 		write_value "$BOOST_FILE" off
-		logger -t "$APP_NAME" "CPU ${temp} C; disabled Cooler Boost"
+		log_info "CPU ${temp} C; disabled Cooler Boost"
 	fi
 
 	status
@@ -265,7 +274,9 @@ main()
 		return
 	fi
 
-	[[ ${EUID} -eq 0 ]] || die "root privileges required"
+	if [[ ${MSI_PROFILE_TESTING:-0} != 1 ]]; then
+		[[ ${EUID} -eq 0 ]] || die "root privileges required"
+	fi
 	umask 077
 	install -d -m 0755 "$STATE_DIR"
 	exec 9> "$LOCK_FILE"
