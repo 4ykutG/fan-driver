@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Privacy-safe live thermal and GPU telemetry recorder."""
+"""Privacy-safe live fan and thermal telemetry recorder."""
 
 import argparse
 import csv
 import os
 import pathlib
-import subprocess
 import sys
 import time
 
 ROOT = pathlib.Path(os.environ.get('MSI_PROFILE_MONITOR_ROOT', '/'))
 FIELDS = (
-    'elapsed_s', 'shift_mode', 'fan_mode', 'cooler_boost',
+    'elapsed_s', 'selected_fan_mode', 'fan_mode', 'cooler_boost',
     'cpu_temp_c', 'ec_cpu_fan_percent', 'cpu_fan_rpm',
-    'ec_gpu_temp_c', 'ec_gpu_fan_percent', 'game_lock',
-    'nvidia_temp_c', 'nvidia_util_percent', 'nvidia_power_w',
-    'nvidia_graphics_mhz', 'nvidia_memory_mhz',
+    'ec_gpu_temp_c', 'ec_gpu_fan_percent',
 )
 
 
@@ -44,29 +41,11 @@ def hwmon_cpu_fan_rpm():
     return ''
 
 
-def nvidia_sample():
-    query = (
-        'temperature.gpu,utilization.gpu,power.draw,'
-        'clocks.gr,clocks.mem')
-    try:
-        result = subprocess.run(
-            ['nvidia-smi', f'--query-gpu={query}',
-             '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, timeout=3, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return ('',) * 5
-    if result.returncode != 0 or not result.stdout.strip():
-        return ('',) * 5
-    values = tuple(value.strip() for value in result.stdout.splitlines()[0].split(','))
-    return values if len(values) == 5 else ('',) * 5
-
-
 def sample(elapsed):
     base = '/sys/devices/platform/msi-ec'
-    nvidia_temp, nvidia_util, nvidia_power, graphics, memory = nvidia_sample()
     return {
         'elapsed_s': f'{elapsed:.2f}',
-        'shift_mode': read(f'{base}/shift_mode'),
+        'selected_fan_mode': read('/run/msi-profile-control/state'),
         'fan_mode': read(f'{base}/fan_mode'),
         'cooler_boost': read(f'{base}/cooler_boost'),
         'cpu_temp_c': read(f'{base}/cpu/realtime_temperature'),
@@ -74,13 +53,6 @@ def sample(elapsed):
         'cpu_fan_rpm': hwmon_cpu_fan_rpm(),
         'ec_gpu_temp_c': read(f'{base}/gpu/realtime_temperature'),
         'ec_gpu_fan_percent': read(f'{base}/gpu/realtime_fan_speed'),
-        'game_lock': 'on' if rooted(
-            '/run/msi-profile-control/game-active').exists() else 'off',
-        'nvidia_temp_c': nvidia_temp,
-        'nvidia_util_percent': nvidia_util,
-        'nvidia_power_w': nvidia_power,
-        'nvidia_graphics_mhz': graphics,
-        'nvidia_memory_mhz': memory,
     }
 
 
@@ -94,7 +66,7 @@ def bounded_float(value, minimum, maximum):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Record anonymous MSI EC/NVIDIA telemetry as CSV.')
+        description='Record anonymous MSI EC fan telemetry as CSV.')
     parser.add_argument(
         '--duration', type=lambda value: bounded_float(value, 1, 86400),
         default=60.0, help='recording duration in seconds (default: 60)')

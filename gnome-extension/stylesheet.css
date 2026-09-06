@@ -35,9 +35,9 @@
     color: white;
 }
 
-.msi-active-super-battery {
-    background-color: rgb(38, 158, 78);
-    box-shadow: 0 6px 20px 0 rgba(38, 158, 78, 0.5);
+.msi-active-auto {
+    background-color: rgb(0, 110, 199);
+    box-shadow: 0 6px 20px 0 rgba(0, 110, 199, 0.5);
 }
 
 .msi-active-silent {
@@ -45,12 +45,7 @@
     box-shadow: 0 6px 20px 0 rgba(84, 82, 222, 0.5);
 }
 
-.msi-active-balanced {
-    background-color: rgb(0, 110, 199);
-    box-shadow: 0 6px 20px 0 rgba(0, 110, 199, 0.5);
-}
-
-.msi-active-performance {
+.msi-active-max {
     background-color: rgb(196, 18, 42);
     box-shadow: 0 6px 20px 0 rgba(196, 18, 42, 0.55);
 }

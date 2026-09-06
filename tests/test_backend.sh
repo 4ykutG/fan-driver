@@ -14,12 +14,11 @@ mkdir -p "${SYSFS}/cpu" "$STATE" "$DMI"
 printf 'Micro-Star International Co., Ltd.\n' > "${DMI}/vendor"
 printf 'Thin GF63 12VE\n' > "${DMI}/product"
 printf '16R8IMS1.107\n' > "${SYSFS}/fw_version"
-printf 'eco\ncomfort\nturbo\n' > "${SYSFS}/available_shift_modes"
 printf 'auto\nsilent\n' > "${SYSFS}/available_fan_modes"
 printf 'comfort\n' > "${SYSFS}/shift_mode"
+printf 'unchanged\n' > "${SYSFS}/power_profile"
 printf 'auto\n' > "${SYSFS}/fan_mode"
 printf 'off\n' > "${SYSFS}/cooler_boost"
-printf 'off\n' > "${SYSFS}/super_battery"
 printf '65\n' > "${SYSFS}/cpu/realtime_temperature"
 
 export MSI_PROFILE_TESTING=1
@@ -28,9 +27,15 @@ export MSI_PROFILE_STATE_DIR="$STATE"
 export MSI_PROFILE_LOCK_FILE="${TEST_DIR}/control.lock"
 export MSI_PROFILE_PRODUCT_FILE="${DMI}/product"
 export MSI_PROFILE_VENDOR_FILE="${DMI}/vendor"
-export MSI_PROFILE_POWERPROFILESCTL=/bin/true
 
 backend="${ROOT_DIR}/msi-profile-control"
+
+# The runtime source must not even name interfaces outside the fan boundary.
+if grep -Eq 'powerprofilesctl|shift_mode|super_battery|game-start|game-stop' \
+	"$backend"; then
+	printf 'backend contains a forbidden power/game control reference\n' >&2
+	exit 1
+fi
 
 assert_value()
 {
@@ -42,38 +47,52 @@ assert_value()
 	}
 }
 
-"$backend" set balanced >/dev/null
-assert_value comfort "${SYSFS}/shift_mode"
-assert_value off "${SYSFS}/cooler_boost"
-
-"$backend" game-start >/dev/null
-assert_value turbo "${SYSFS}/shift_mode"
-assert_value on "${SYSFS}/cooler_boost"
-[[ -e ${STATE}/game-active ]]
-
-# A manual low-power request cannot break the active game lock.
+# All three modes change fan controls only.
 "$backend" set silent >/dev/null
-assert_value turbo "${SYSFS}/shift_mode"
-assert_value on "${SYSFS}/cooler_boost"
-
-# Heat soak keeps Cooler Boost on after returning to Balanced.
-printf '85\n' > "${SYSFS}/cpu/realtime_temperature"
-"$backend" game-stop >/dev/null
+assert_value silent "${SYSFS}/fan_mode"
+assert_value off "${SYSFS}/cooler_boost"
 assert_value comfort "${SYSFS}/shift_mode"
-assert_value on "${SYSFS}/cooler_boost"
-[[ ! -e ${STATE}/game-active ]]
+assert_value unchanged "${SYSFS}/power_profile"
 
-# Daily-use hysteresis releases Cooler Boost only after cooling down.
-printf '70\n' > "${SYSFS}/cpu/realtime_temperature"
+# At 90 C the safety override starts without changing the selected mode.
+printf '90\n' > "${SYSFS}/cpu/realtime_temperature"
+output=$("$backend" guard)
+assert_value on "${SYSFS}/cooler_boost"
+assert_value silent "${STATE}/state"
+[[ $output == *$'status\tsilent\t90\tsilent\ton\t90°C üzeri: Cooler Boost' ]]
+
+# Hysteresis keeps boost running until the machine has actually cooled.
+printf '80\n' > "${SYSFS}/cpu/realtime_temperature"
+"$backend" guard >/dev/null
+assert_value on "${SYSFS}/cooler_boost"
+printf '75\n' > "${SYSFS}/cpu/realtime_temperature"
 "$backend" guard >/dev/null
 assert_value off "${SYSFS}/cooler_boost"
+assert_value silent "${SYSFS}/fan_mode"
 
-# Unknown firmware must fail closed without touching the EC profile.
+# Maximum fan is fixed Cooler Boost; cycle then returns to automatic.
+"$backend" set max >/dev/null
+assert_value auto "${SYSFS}/fan_mode"
+assert_value on "${SYSFS}/cooler_boost"
+"$backend" cycle >/dev/null
+assert_value auto "${STATE}/state"
+assert_value off "${SYSFS}/cooler_boost"
+
+# Even an explicit silent request cannot defeat the 90 C safety override.
+printf '94\n' > "${SYSFS}/cpu/realtime_temperature"
+"$backend" set silent >/dev/null
+assert_value silent "${SYSFS}/fan_mode"
+assert_value on "${SYSFS}/cooler_boost"
+assert_value comfort "${SYSFS}/shift_mode"
+assert_value unchanged "${SYSFS}/power_profile"
+
+# Unknown firmware fails closed without changing any setting.
 printf 'UNKNOWN.999\n' > "${SYSFS}/fw_version"
-if "$backend" set performance >/dev/null 2>&1; then
+if "$backend" set max >/dev/null 2>&1; then
 	printf 'unknown firmware unexpectedly succeeded\n' >&2
 	exit 1
 fi
+assert_value silent "${SYSFS}/fan_mode"
 assert_value comfort "${SYSFS}/shift_mode"
 
-printf 'backend integration tests: ok\n'
+printf 'backend fan-only integration tests: ok\n'

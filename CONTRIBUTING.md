@@ -13,5 +13,4 @@ New laptop support must be reviewed separately and backed by upstream
 compatibility.
 
 Shell code uses `set -Eeuo pipefail`; Python targets Python 3.11 or later.
-Changes to game detection should include a synthetic `/proc` test.
 Backend changes should extend the fake-sysfs integration test.

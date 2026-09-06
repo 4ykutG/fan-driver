@@ -1,8 +1,8 @@
 .PHONY: test install uninstall
 
 test:
-	bash -n msi-profile-control install-system.sh gaming-setup.sh uninstall.sh msi-game-run
-	python3 -m py_compile msi-profile-hotkeyd msi-profile-osd msi-profile-doctor msi-profile-monitor configure-steam-cs2.py
+	bash -n msi-profile-control install-system.sh uninstall.sh
+	python3 -m py_compile msi-profile-hotkeyd msi-profile-osd msi-profile-doctor msi-profile-monitor
 	python3 -m unittest discover -s tests -v
 	bash tests/test_backend.sh
 

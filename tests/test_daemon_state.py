@@ -10,21 +10,17 @@ hotkeyd = importlib.machinery.SourceFileLoader(
     'msi_profile_hotkeyd_state', str(ROOT / 'msi-profile-hotkeyd')).load_module()
 
 
-def result(profile='performance', boost='on'):
+def result(mode='auto', boost='off', message='ok'):
     return {
-        'result': 'applied',
-        'profile': profile,
-        'temp': '70',
-        'fan': 'auto',
-        'boost': boost,
-        'message': 'ok',
+        'result': 'applied', 'mode': mode, 'profile': mode,
+        'temp': '70', 'fan': 'silent' if mode == 'silent' else 'auto',
+        'boost': boost, 'message': message,
     }
 
 
 class DaemonStateTests(unittest.TestCase):
     def setUp(self):
         self.daemon = hotkeyd.HotkeyDaemon()
-        self.daemon.game_active = False
         self.events = []
         self.daemon.publish = (
             lambda phase, **fields: self.events.append((phase, fields)))
@@ -32,56 +28,35 @@ class DaemonStateTests(unittest.TestCase):
     def tearDown(self):
         self.daemon.selector.close()
 
-    @mock.patch.object(hotkeyd, 'log')
-    @mock.patch.object(hotkeyd, 'running_games', return_value=['cs2'])
-    def test_game_start_locks_performance(self, _games, _log):
-        with mock.patch.object(
-                hotkeyd, 'run_backend', return_value=result()) as backend:
-            self.daemon.scan_game_state()
-
-        backend.assert_called_once_with('game-start')
-        self.assertTrue(self.daemon.game_active)
-        self.assertEqual(self.daemon.current, 'performance')
-        self.assertEqual(self.events[-1][0], 'applied')
-        self.assertEqual(self.events[-1][1]['message'], 'Oyun modu: cs2')
-
-    @mock.patch.object(hotkeyd, 'log')
-    @mock.patch.object(hotkeyd, 'running_games', return_value=[])
-    def test_game_exit_uses_grace_period(self, _games, _log):
-        self.daemon.game_active = True
-        clock = {'now': 100.0}
-
-        def backend_call(action):
-            self.assertEqual(action, 'game-stop')
-            return result('balanced', 'off')
-
-        with mock.patch.object(
-                hotkeyd.time, 'monotonic', side_effect=lambda: clock['now']), \
-                mock.patch.object(hotkeyd, 'run_backend',
-                                  side_effect=backend_call) as backend:
-            self.daemon.scan_game_state()
-            self.assertEqual(backend.call_count, 0)
-            clock['now'] = 107.9
-            self.daemon.scan_game_state()
-            self.assertEqual(backend.call_count, 0)
-            clock['now'] = 108.0
-            self.daemon.scan_game_state()
-
-        backend.assert_called_once_with('game-stop')
-        self.assertFalse(self.daemon.game_active)
-        self.assertEqual(self.daemon.current, 'balanced')
-        self.assertEqual(self.events[-1][1]['message'],
-                         'Oyun kapandı: Dengeli mod')
-
-    def test_initial_sync_publishes_readable_state(self):
-        with mock.patch.object(
-                hotkeyd, 'run_backend',
-                return_value=result('balanced', 'off')):
+    def test_initial_sync_publishes_fan_mode(self):
+        with mock.patch.object(hotkeyd, 'run_backend',
+                               return_value=result('silent')):
             self.daemon.sync_current()
-
-        self.assertEqual(self.daemon.current, 'balanced')
+        self.assertEqual(self.daemon.current, 'silent')
         self.assertEqual(self.events[-1][0], 'sync')
-        self.assertEqual(self.events[-1][1]['profile'], 'balanced')
+        self.assertEqual(self.events[-1][1]['mode'], 'silent')
+
+    def test_fn_f7_cycles_only_three_fan_modes(self):
+        self.daemon.current = 'auto'
+        with mock.patch.object(hotkeyd.time, 'monotonic', return_value=10):
+            self.daemon.handle_press()
+        self.assertEqual(self.daemon.pending, 'silent')
+        self.assertEqual(self.events[-1][1]['selected'], 'silent')
+
+        with mock.patch.object(hotkeyd, 'run_backend',
+                               return_value=result('silent')) as backend:
+            self.daemon.commit()
+        backend.assert_called_once_with('set', 'silent')
+        self.assertEqual(self.daemon.current, 'silent')
+
+    def test_guard_publishes_automatic_boost_transition(self):
+        self.daemon.current = 'silent'
+        self.daemon.last_boost = 'off'
+        hot = result('silent', 'on', '90°C üzeri: Cooler Boost')
+        with mock.patch.object(hotkeyd, 'run_backend', return_value=hot):
+            self.daemon.run_guard()
+        self.assertEqual(self.events[-1][0], 'applied')
+        self.assertEqual(self.events[-1][1]['boost'], 'on')
 
 
 if __name__ == '__main__':

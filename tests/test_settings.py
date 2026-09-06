@@ -21,34 +21,18 @@ class SettingsTests(unittest.TestCase):
         hotkeyd.CONFIG_FILE = self.old_path
         self.tempdir.cleanup()
 
-    def test_valid_settings(self):
-        self.path.write_text(
-            '[daemon]\n'
-            'game_scan_interval = 1.5\n'
-            'game_exit_delay = 12\n'
-            'guard_interval = 30\n', encoding='utf-8')
-        self.assertEqual(hotkeyd.read_settings(), {
-            'game_scan_interval': 1.5,
-            'game_exit_delay': 12.0,
-            'guard_interval': 30.0,
-        })
+    def test_valid_guard_interval(self):
+        self.path.write_text('[daemon]\nguard_interval = 30\n', encoding='utf-8')
+        self.assertEqual(hotkeyd.read_settings(), {'guard_interval': 30.0})
 
-    def test_invalid_and_out_of_range_values_use_defaults(self):
-        self.path.write_text(
-            '[daemon]\n'
-            'game_scan_interval = 0.01\n'
-            'game_exit_delay = not-a-number\n'
-            'guard_interval = 99999\n', encoding='utf-8')
+    def test_invalid_guard_interval_uses_default(self):
+        self.path.write_text('[daemon]\nguard_interval = 99999\n', encoding='utf-8')
         self.assertEqual(hotkeyd.read_settings(), {
-            'game_scan_interval': hotkeyd.GAME_SCAN_INTERVAL,
-            'game_exit_delay': hotkeyd.GAME_EXIT_DELAY,
-            'guard_interval': hotkeyd.GUARD_INTERVAL,
-        })
+            'guard_interval': hotkeyd.GUARD_INTERVAL})
 
-    def test_missing_file_uses_defaults(self):
+    def test_missing_file_uses_default(self):
         self.assertEqual(hotkeyd.read_settings(), {
-            key: limits[0] for key, limits in hotkeyd.SETTING_RANGES.items()
-        })
+            'guard_interval': hotkeyd.GUARD_INTERVAL})
 
 
 if __name__ == '__main__':

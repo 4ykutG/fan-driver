@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Read-only support report for MSI GF63 Auto Profile."""
+"""Read-only support report for MSI GF63 Fan Control."""
 
 import argparse
 import json
@@ -9,7 +9,7 @@ import pathlib
 import platform
 import subprocess
 
-VERSION = '0.1.0'
+VERSION = '0.2.0'
 ROOT = pathlib.Path(os.environ.get('MSI_PROFILE_DOCTOR_ROOT', '/'))
 
 
@@ -74,7 +74,7 @@ def build_report():
         firmware == '16R8IMS1.107')
 
     return {
-        'privacy': 'No username, hostname, serial number, Steam data or tokens collected',
+        'privacy': 'No username, hostname, serial number or tokens collected',
         'software': {'version': VERSION},
         'os': {
             'kernel': platform.release(),
@@ -88,34 +88,24 @@ def build_report():
         },
         'ec': {
             'driver_loaded': exists(base),
-            'shift_mode': read(f'{base}/shift_mode'),
             'fan_mode': read(f'{base}/fan_mode'),
             'cooler_boost': read(f'{base}/cooler_boost'),
-            'super_battery': read(f'{base}/super_battery'),
             'cpu_temperature_c': read(f'{base}/cpu/realtime_temperature'),
             'ec_cpu_fan_percent': read(f'{base}/cpu/realtime_fan_speed'),
             'cpu_fan_rpm': hwmon_cpu_fan_rpm(),
             'gpu_temperature_c': read(f'{base}/gpu/realtime_temperature'),
             'ec_gpu_fan_percent': read(f'{base}/gpu/realtime_fan_speed'),
-            'available_shift_modes': read(f'{base}/available_shift_modes'),
             'available_fan_modes': read(f'{base}/available_fan_modes'),
         },
         'runtime': {
             'service_active': run(
                 'systemctl', 'is-active', 'msi-profile-hotkeyd.service',
                 allow_failure=True),
-            'game_lock': exists('/run/msi-profile-control/game-active'),
-            'power_profile': run('powerprofilesctl', 'get'),
+            'selected_fan_mode': read('/run/msi-profile-control/state'),
         },
         'packages': {
-            name: package_version(name) for name in (
-                'msi-ec-dkms-git', 'gamemode', 'lib32-gamemode', 'mangohud',
-                'nvidia-utils', 'nvidia-prime')
+            name: package_version(name) for name in ('msi-ec-dkms-git',)
         },
-        'nvidia': run(
-            'nvidia-smi',
-            '--query-gpu=name,driver_version,power.limit,temperature.gpu',
-            '--format=csv,noheader,nounits'),
     }
 
 
@@ -141,7 +131,7 @@ def main():
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
-        print('MSI GF63 Auto Profile doctor')
+        print('MSI GF63 Fan Control doctor')
         for key, value in flatten(report):
             print(f'{key}: {value}')
     return 0 if report['hardware']['supported'] else 1

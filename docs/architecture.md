@@ -1,31 +1,14 @@
-# Architecture and safety
+# Architecture
 
-1. `msi-profile-hotkeyd` runs as a sandboxed root system service.
-2. It reads the Fn+F7 evdev event and scans process metadata for games.
-3. It invokes `msi-profile-control`, the only component that writes `msi-ec`
-   sysfs attributes.
-4. The backend validates DMI model, vendor and EC firmware before every write.
-5. The daemon publishes a mode-0644 JSON snapshot in `/run`.
-6. The unprivileged GTK OSD or GNOME Shell extension only reads that snapshot.
+The project has three deliberately narrow layers:
 
-The daemon scans executable symlink paths first. It reads command lines and the
-two Steam app-id environment entries only for Proton/Wine runtime candidates,
-never for unrelated processes. It does not store or log process environments.
+1. `msi-profile-control` validates the exact laptop and EC firmware, serializes
+   access, and writes only `fan_mode` and `cooler_boost`.
+2. `msi-profile-hotkeyd` reads kernel `KEY_PROG3` events for Fn+F7, cycles the
+   three fan modes, and runs the thermal guard every 15 seconds.
+3. The GNOME extension or GTK application renders the read-only OSD state from
+   `/run/msi-profile-control/osd-state`.
 
-## Game lock
-
-`game-start` applies Turbo, automatic EC fan control, Cooler Boost and the
-performance power profile. A runtime marker prevents manual or thermal-guard
-changes from selecting a lower mode while a game is active. The guard only
-repairs drift from that fixed state. `game-stop` removes the marker and applies
-Balanced; Cooler Boost remains active during heat soak until the CPU cools.
-
-## Trust boundary
-
-Only root can write the EC sysfs files. There is no NOPASSWD sudo rule, D-Bus
-write API, socket or writable root command file. `/etc/msi-profile-games.conf`
-contains executable basenames only and cannot inject commands.
-
-The exact firmware allowlist is intentional. Supporting a new firmware requires
-upstream `msi-ec` support and real-hardware validation; never infer EC register
-compatibility from a similar marketing name.
+At 90°C the guard enables Cooler Boost without changing the saved fan mode.
+Hysteresis keeps it enabled until 75°C. No component imports a power-management
+API or writes MSI Shift, battery, CPU or GPU settings.

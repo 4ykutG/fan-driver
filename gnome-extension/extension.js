@@ -13,42 +13,34 @@ const HIDE_DELAY_MS = 1800;
 // Icons are bundled as stroke-style SVGs so the panel matches the GTK OSD
 // used on other desktops, independent of the icon theme.
 const ICON_SVG = {
-    'super-battery': `
+    'auto': `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="88" height="88"
      fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="2" y="7.5" width="16.5" height="9" rx="2.5"/>
-  <path d="M21.5 10.5v3" stroke-width="2.2"/>
-  <path d="M11.2 9.2 8.8 12h3.2l-2.4 2.8"/>
+  <circle cx="12" cy="12" r="2"/>
+  <path d="M12 10c-1-4.8 1.4-7.2 4.4-6.6 2.6.5 2.8 3.5.8 5.2C15.8 9.8 14 10.2 12 10z"/>
+  <path d="M13.7 13c4.7 1.5 5.5 4.8 3.4 7-1.8 1.9-4.5.6-5-2-.3-1.8.3-3.5 1.6-5z"/>
+  <path d="M10.3 13c-3.6 3.3-6.8 2.5-7.7-.4-.8-2.5 1.6-4.3 4-3.3 1.7.7 2.9 2 3.7 3.7z"/>
 </svg>`,
     'silent': `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="88" height="88"
      fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
   <path d="M20.5 14.2A8.7 8.7 0 1 1 9.8 3.5a7.2 7.2 0 0 0 10.7 10.7z"/>
 </svg>`,
-    'balanced': `
+    'max': `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="88" height="88"
      fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M3.5 16.5a8.5 8.5 0 0 1 17 0"/>
-  <path d="M12 16.5V9.8"/>
-  <circle cx="12" cy="16.5" r="1.3" fill="#fff" stroke="none"/>
-  <path d="M6.3 11l1.2 1.2M17.7 11l-1.2 1.2"/>
-</svg>`,
-    'performance': `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="88" height="88"
-     fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 2.8c2.7 2.2 4 5.3 4 8.6v2.4l-4 2.4-4-2.4v-2.4c0-3.3 1.3-6.4 4-8.6z"/>
-  <circle cx="12" cy="9.5" r="1.7"/>
-  <path d="M8 13.5l-2.6 2.9h2.9"/>
-  <path d="M16 13.5l2.6 2.9h-2.9"/>
-  <path d="M12 18.6v2.6"/>
+  <circle cx="12" cy="12" r="8.5"/>
+  <circle cx="12" cy="12" r="1.7"/>
+  <path d="M12 10.3c-.8-4 1.1-6 3.7-5.5 2.3.4 2.4 3 .7 4.5-1.2 1-2.7 1.3-4.4 1z"/>
+  <path d="M13.5 12.9c3.8 1.2 4.5 3.9 2.7 5.8-1.6 1.6-3.8.5-4.2-1.7-.3-1.5.3-2.9 1.5-4.1z"/>
+  <path d="M10.5 12.9c-3 2.7-5.5 2-6.3-.4-.7-2.2 1.4-3.7 3.4-2.8 1.4.5 2.4 1.6 2.9 3.2z"/>
 </svg>`,
 };
 
-const PROFILES = [
-    {id: 'super-battery', name: 'SÜPER PİL'},
+const MODES = [
+    {id: 'auto', name: 'OTOMATİK'},
     {id: 'silent', name: 'SESSİZ'},
-    {id: 'balanced', name: 'DENGELİ'},
-    {id: 'performance', name: 'PERFORMANS'},
+    {id: 'max', name: 'MAKSİMUM FAN'},
 ];
 
 export default class MsiProfileOsdExtension extends Extension {
@@ -97,7 +89,7 @@ export default class MsiProfileOsdExtension extends Extension {
         });
 
         const title = new St.Label({
-            text: 'MSI USER SCENARIO',
+            text: 'MSI FAN CONTROL',
             style_class: 'msi-profile-title',
             x_align: Clutter.ActorAlign.CENTER,
         });
@@ -107,7 +99,7 @@ export default class MsiProfileOsdExtension extends Extension {
         });
 
         this._cards = new Map();
-        for (const item of PROFILES) {
+        for (const item of MODES) {
             const card = new St.BoxLayout({
                 vertical: true,
                 style_class: 'msi-profile-card',
@@ -174,7 +166,7 @@ export default class MsiProfileOsdExtension extends Extension {
     _render(state) {
         const highlight = state.phase === 'preview'
             ? state.selected
-            : state.profile;
+            : (state.mode ?? state.profile);
 
         for (const [id, {card, icon}] of this._cards) {
             const active = id === highlight;
@@ -193,7 +185,8 @@ export default class MsiProfileOsdExtension extends Extension {
             this._status.text = state.message ?? 'Hata';
         } else {
             this._status.set_style_class_name('msi-profile-status');
-            const fanText = state.boost === 'on' ? 'Maksimum' : 'Otomatik';
+            const fanText = state.boost === 'on' ? 'Maksimum' :
+                (state.fan === 'silent' ? 'Sessiz' : 'Otomatik');
             const suffix = state.message && state.message !== 'ok'
                 ? `  •  ${state.message}` : '';
             this._status.text = `CPU ${state.temp}°C  •  Fan ${fanText}${suffix}`;

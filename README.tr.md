@@ -1,72 +1,67 @@
-# MSI GF63 Otomatik Profil
+# MSI GF63 Fan Control
 
-MSI Thin GF63 12VE için Linux üzerinde çalışan özgür bir MSI Center
-alternatifidir. Fn+F7 profil ekranı, otomatik oyun algılama, oyun sırasında
-maksimum fan ve GameMode/RTX 4050 entegrasyonu sağlar.
+MSI Thin GF63 12VE için GPL-3.0 lisanslı, yalnız fan denetimi yapan Linux
+yazılımıdır. Fn+F7 ile Otomatik, Sessiz ve Maksimum Fan modları arasında
+geçilir. CPU 90°C'ye ulaştığında seçili moddan bağımsız olarak Cooler Boost
+açılır; 75°C'ye soğuyunca daha önce seçilen Otomatik veya Sessiz moda dönülür.
 
-> **Dikkat:** 0.1.0 sürümü yalnız `Thin GF63 12VE` ve
-> `16R8IMS1.107` EC firmware’i için yazma yapar. Başka bir model veya firmware
-> algılarsa güvenlik amacıyla çalışmayı reddeder.
+## Güç ayarlarından tamamen bağımsız
 
-## Davranış
+Yazılım yalnız şu iki `msi-ec` arayüzüne yazar:
 
-- Fn+F7: Süper Pil → Sessiz → Dengeli → Performans kartlarını gösterir.
-- Steam/Proton oyunu açılınca: Turbo + Cooler Boost sabitlenir.
-- Oyun sırasında yazılımsal ısı eşiği profil veya fan modunu değiştirmez.
-- Son oyun kapandıktan 8 saniye sonra Dengeli moda döner.
-- BIOS/EC sıcaklık kısma ve acil kapanma korumalarına dokunulmaz.
-- Bilinmeyen firmware’e EC yazması yapılmaz.
+- `/sys/devices/platform/msi-ec/fan_mode`
+- `/sys/devices/platform/msi-ec/cooler_boost`
 
-Bu proje yeni bir çekirdek fan sürücüsü değildir; açık kaynak
-[`msi-ec`](https://github.com/BeardOverflow/msi-ec) sürücüsünün güvenli kullanıcı
-alanı denetleyicisidir.
+`powerprofilesctl` çalıştırmaz; GNOME/KDE güç moduna, MSI `shift_mode` ve
+`super_battery` ayarlarına, CPU/GPU güç limitlerine dokunmaz. Oyun algılamaz ve
+GameMode başlatmaz. Bilgisayarın güç/performance seçimi tamamen sende kalır.
+
+## Fan modları
+
+| Fn+F7 modu | EC fan ayarı | Cooler Boost |
+|---|---|---|
+| Otomatik | `auto` | normalde kapalı, 90°C'de zorunlu açık |
+| Sessiz | `silent` | normalde kapalı, 90°C'de zorunlu açık |
+| Maksimum Fan | `auto` | sürekli açık |
+
+Firmware'in termal yavaşlatma ve acil kapanma korumaları devre dışı bırakılmaz.
+
+## Desteklenen sistem
+
+- MSI Thin GF63 12VE
+- EC firmware `16R8IMS1.107`
+- `fan_mode` ve `cooler_boost` arayüzlerini sunan uyumlu `msi-ec` sürücüsü
+- Python 3; yedek OSD için GTK 4/PyGObject
 
 ## Kurulum
 
 ```bash
-git clone https://github.com/4ykutG/fan-driver.git
+git clone git@github.com:4ykutG/fan-driver.git
 cd fan-driver
+make test
 sudo ./install-system.sh
+```
+
+GNOME eklentisini gerekirse bir kez etkinleştir:
+
+```bash
 gnome-extensions enable msi-gf63-profile-osd@4ykutg.github.io
 ```
 
-CachyOS/Arch üzerinde GameMode, MangoHud, NVIDIA PRIME ve CS2 ayarı:
+Fn+F7 eşlemesi hemen yenilenmezse oturumu kapatıp tekrar aç.
+
+## Elle kullanım
 
 ```bash
-sudo ./gaming-setup.sh --configure-cs2
+sudo msi-profile-control set auto
+sudo msi-profile-control set silent
+sudo msi-profile-control set max
+sudo msi-profile-control status
+msi-profile-doctor
 ```
 
-CS2 Steam başlatma seçeneği `msi-game-run %command%` olur. Steam dosyası
-değiştirilmeden önce zaman damgalı yedek alınır.
+Servis sıcaklığı varsayılan olarak 15 saniyede bir kontrol eder. Aralık
+`/etc/msi-profile-control.conf` içinde 5-120 saniye arasında değiştirilebilir.
 
-Steam dışı oyunların çalıştırılabilir dosya adlarını
-`/etc/msi-profile-games.conf` dosyasına birer satır olarak ekleyebilirsiniz.
-
-Oyun tarama, kapanış gecikmesi ve günlük termal kontrol süreleri
-`/etc/msi-profile-control.conf` dosyasından güvenli sınırlar içinde
-değiştirilebilir. Sonrasında `sudo systemctl restart msi-profile-hotkeyd`
-çalıştırılır.
-
-Destek isterken kişisel veri toplamayan salt-okunur tanı çıktısı:
-
-```bash
-msi-profile-doctor --json
-```
-
-Kişisel veri veya süreç adı içermeyen 60 saniyelik sıcaklık/GPU kaydı:
-
-```bash
-msi-profile-monitor --duration 60 --output cs2-session.csv
-```
-
-## Kaldırma ve test
-
-```bash
-make test
-sudo ./uninstall.sh
-```
-
-Windows’tan daha yüksek FPS garanti edilemez. Bu araç yanlış GPU/profil
-seçimini düzeltir; GPU’ya hız aşırtma yapmaz ve 45 W firmware sınırını aşmaz.
-
-Lisans: GPL-3.0-or-later. Ayrıntılar için [LICENSE](LICENSE).
+`make test`, fan işlemleri sırasında sahte `shift_mode` ve güç profili
+değerlerinin hiç değişmediğini de doğrular.

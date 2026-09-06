@@ -15,13 +15,10 @@ class MonitorTests(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tempdir.name)
         self.old_root = monitor.ROOT
-        self.old_nvidia = monitor.nvidia_sample
         monitor.ROOT = self.root
-        monitor.nvidia_sample = lambda: ('55', '87', '43.2', '1905', '7001')
 
     def tearDown(self):
         monitor.ROOT = self.old_root
-        monitor.nvidia_sample = self.old_nvidia
         self.tempdir.cleanup()
 
     def write(self, name, value):
@@ -31,7 +28,6 @@ class MonitorTests(unittest.TestCase):
 
     def test_sample_contains_only_hardware_telemetry(self):
         base = '/sys/devices/platform/msi-ec'
-        self.write(f'{base}/shift_mode', 'turbo')
         self.write(f'{base}/fan_mode', 'auto')
         self.write(f'{base}/cooler_boost', 'on')
         self.write(f'{base}/cpu/realtime_temperature', '82')
@@ -40,13 +36,12 @@ class MonitorTests(unittest.TestCase):
         self.write(f'{base}/gpu/realtime_fan_speed', '0')
         self.write('/sys/class/hwmon/hwmon2/name', 'msi_wmi_platform')
         self.write('/sys/class/hwmon/hwmon2/fan1_input', '7058')
-        self.write('/run/msi-profile-control/game-active', 'active')
+        self.write('/run/msi-profile-control/state', 'max')
 
         row = monitor.sample(2.5)
         self.assertEqual(tuple(row), monitor.FIELDS)
-        self.assertEqual(row['game_lock'], 'on')
+        self.assertEqual(row['selected_fan_mode'], 'max')
         self.assertEqual(row['cpu_fan_rpm'], '7058')
-        self.assertEqual(row['nvidia_util_percent'], '87')
         forbidden = {'username', 'hostname', 'serial', 'process', 'path', 'token'}
         keys = ' '.join(row).lower()
         for name in forbidden:

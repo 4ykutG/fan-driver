@@ -1,37 +1,25 @@
 # Community launch draft
 
-Do not post this until real-hardware validation is complete, the repository is
-public and `v0.1.0` exists.
+Do not post until hardware validation is complete and a release is tagged.
 
 ## English
 
-**MSI GF63 Auto Profile — an open-source MSI Center-style controller for Linux**
+**MSI GF63 Fan Control — independent Fn+F7 fan modes for Linux**
 
-I built a small GPL-3.0 userspace controller for MSI Thin GF63 12VE laptops
-running Linux. It uses the upstream `msi-ec` driver and adds an Fn+F7 profile
-OSD, automatic native Steam/Proton game detection, fixed Turbo + Cooler Boost
-during games, delayed return to Balanced, and optional GameMode/NVIDIA PRIME
-integration.
+This GPL-3.0 controller adds an MSI Center-style Fn+F7 OSD with Automatic,
+Silent and Maximum Fan modes for the MSI Thin GF63 12VE. It uses `msi-ec`,
+forces Cooler Boost at 90°C, and restores the chosen mode after cooling.
 
-Safety is intentionally strict: the first release only writes on Thin GF63
-12VE with EC firmware 16R8IMS1.107, never writes raw EC addresses, does not
-overclock, and keeps firmware thermal protections enabled.
-
-I am looking for code review, packaging help, desktop/OSD testing and benchmark
-feedback from owners of the exact supported hardware. Please read the safety
-notes before testing and never post unredacted EC dumps or Steam files.
+Its scope is intentionally narrow: it never changes desktop power profiles,
+MSI Shift, CPU/GPU limits or game settings. Review, packaging help and testing
+on the exact supported hardware are welcome.
 
 ## Türkçe
 
-**MSI GF63 Auto Profile — Linux için özgür MSI Center tarzı profil aracı**
+**MSI GF63 Fan Control — Linux için bağımsız Fn+F7 fan modları**
 
-MSI Thin GF63 12VE için GPL-3.0 lisanslı bir kullanıcı alanı denetleyicisi
-geliştirdim. Upstream `msi-ec` sürücüsünü kullanıyor; Fn+F7 profil OSD’si,
-Steam/Proton oyun algılama, oyun boyunca sabit Turbo + Cooler Boost, oyun
-kapanınca Dengeli moda dönüş ve isteğe bağlı GameMode/NVIDIA PRIME desteği
-ekliyor.
-
-İlk sürüm yalnız Thin GF63 12VE / 16R8IMS1.107 üzerinde yazma yapıyor; ham EC
-adreslerine dokunmuyor, hız aşırtmıyor ve firmware termal korumalarını açık
-tutuyor. Kod incelemesi, paketleme, masaüstü testi ve aynı donanım sahiplerinden
-ölçümlü geri bildirim arıyorum.
+Bu GPL-3.0 yazılım MSI Thin GF63 12VE üzerinde Fn+F7 ile Otomatik, Sessiz ve
+Maksimum Fan seçimi sunar. 90°C'de Cooler Boost'u zorunlu açar, soğuyunca
+seçilen moda döner. Güç profiline, MSI Shift'e, CPU/GPU limitlerine veya oyun
+ayarlarına dokunmaz. Kod incelemesi, paketleme ve aynı donanımda test desteği
+arıyorum.

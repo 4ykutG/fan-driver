@@ -20,7 +20,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 [[ $(<"${SYSFS_BASE}/fw_version") == '16R8IMS1.107' ]] ||
 	die 'unsupported EC firmware; refusing to write unknown EC registers'
 
-for command in python3 systemctl powerprofilesctl; do
+for command in python3 systemctl; do
 	command -v "$command" >/dev/null || die "missing dependency: $command"
 done
 
@@ -40,14 +40,8 @@ install -Dm0644 "${SOURCE_DIR}/msi-profile-osd.service" \
 	/etc/systemd/user/msi-profile-osd.service
 install -Dm0644 "${SOURCE_DIR}/90-msi-gf63-hotkeys.hwdb" \
 	/etc/udev/hwdb.d/90-msi-gf63-hotkeys.hwdb
-if [[ ! -e /etc/msi-profile-games.conf ]]; then
-	install -Dm0644 "${SOURCE_DIR}/msi-profile-games.conf" \
-		/etc/msi-profile-games.conf
-fi
-if [[ ! -e /etc/msi-profile-control.conf ]]; then
-	install -Dm0644 "${SOURCE_DIR}/msi-profile-control.conf" \
-		/etc/msi-profile-control.conf
-fi
+install -Dm0644 "${SOURCE_DIR}/msi-profile-control.conf" \
+	/etc/msi-profile-control.conf
 install -Dm0644 "${SOURCE_DIR}/gnome-extension/extension.js" \
 	"${EXTENSION_DIR}/extension.js"
 install -Dm0644 "${SOURCE_DIR}/gnome-extension/metadata.json" \
@@ -65,4 +59,4 @@ printf '\nInstalled successfully.\n'
 printf 'GNOME users: gnome-extensions enable %s\n' "$EXTENSION_UUID"
 printf 'Other desktops: log out/in once to start the GTK OSD.\n'
 printf 'Support report: msi-profile-doctor\n'
-printf 'Telemetry capture: msi-profile-monitor --duration 60 -o session.csv\n'
+printf 'Fan telemetry: msi-profile-monitor --duration 60 -o session.csv\n'

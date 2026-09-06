@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MSI Thin GF63 12VE: the Fn+F7 MSI Center key is reported as KEY_CONFIG,
 # which GNOME reserves for Display Settings. Give this model a dedicated,
-# otherwise-unused programmable key so it can cycle MSI profiles.
+# otherwise-unused programmable key so it can cycle fan modes.
 evdev:atkbd:dmi:*:svnMicro-StarInternationalCo.,Ltd.:pnThinGF6312VE:*
  KEYBOARD_KEY_91=prog3

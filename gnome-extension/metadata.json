@@ -1,8 +1,8 @@
 {
   "uuid": "msi-gf63-profile-osd@4ykutg.github.io",
-  "name": "MSI GF63 Profile OSD",
-  "description": "Shows the MSI GF63 profile selector driven by msi-profile-hotkeyd.",
+  "name": "MSI GF63 Fan OSD",
+  "description": "Shows the independent Fn+F7 fan mode selector.",
   "shell-version": ["50"],
   "url": "https://github.com/4ykutG/fan-driver",
-  "version": 1
+  "version": 2
 }
