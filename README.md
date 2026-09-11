@@ -16,6 +16,14 @@ It does not call `powerprofilesctl`, change GNOME/KDE power modes, write MSI
 `shift_mode` or `super_battery`, alter CPU/GPU limits, detect games, or run
 GameMode. Desktop power settings remain entirely under the user's control.
 
+One exception lives in the installer, never in the controller. Version 0.1.x
+did drive `shift_mode` and `super_battery`. 0.2.0 dropped that scope and can no
+longer undo it, so an upgrade would strand the EC on whatever 0.1.x last wrote
+-- `turbo` above all, with nothing left able to reset it. When
+`install-system.sh` finds a 0.1.x backend already in place it releases that
+leftover once (`turbo` or `eco` to `comfort`, `super_battery` to `off`) and
+never touches either again.
+
 ## Fan modes
 
 | Fn+F7 mode | EC fan mode | Cooler Boost |

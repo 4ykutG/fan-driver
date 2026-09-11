@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-09-12
+
+- `install-system.sh` now releases the MSI Shift and `super_battery` values a
+  0.1.x install left behind before overwriting it. 0.2.0 removed that scope
+  without a migration, so upgrading stranded the EC in `turbo` with nothing
+  left able to reset it. The controller itself still writes neither.
+
 ## 0.2.0 - 2026-09-07
 
 - Refactored the controller to three fan-only modes: Automatic, Silent and

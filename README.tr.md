@@ -16,6 +16,14 @@ Yazılım yalnız şu iki `msi-ec` arayüzüne yazar:
 `super_battery` ayarlarına, CPU/GPU güç limitlerine dokunmaz. Oyun algılamaz ve
 GameMode başlatmaz. Bilgisayarın güç/performance seçimi tamamen sende kalır.
 
+Tek istisna denetleyicide değil, kurulum betiğindedir. 0.1.x sürümü
+`shift_mode` ve `super_battery` ayarlarını yönetiyordu. 0.2.0 bu kapsamı
+bıraktığı için geri de alamaz; yükseltme, EC'yi 0.1.x'in en son yazdığı
+değerde bırakır ve en zararlısı olan `turbo`'yu sıfırlayabilecek hiçbir şey
+kalmaz. `install-system.sh`, yerinde bir 0.1.x backend bulursa bu kalıntıyı
+bir kez serbest bırakır (`turbo` veya `eco` -> `comfort`, `super_battery` ->
+`off`) ve bir daha ikisine de dokunmaz.
+
 ## Fan modları
 
 | Fn+F7 modu | EC fan ayarı | Cooler Boost |

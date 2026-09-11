@@ -6,8 +6,43 @@ readonly SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SYSFS_BASE="/sys/devices/platform/msi-ec"
 readonly EXTENSION_UUID="msi-gf63-profile-osd@4ykutg.github.io"
 readonly EXTENSION_DIR="/usr/share/gnome-shell/extensions/${EXTENSION_UUID}"
+readonly INSTALLED_BACKEND="/usr/local/sbin/msi-profile-control"
+readonly SHIFT_FILE="${SYSFS_BASE}/shift_mode"
+readonly BATTERY_FILE="${SYSFS_BASE}/super_battery"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+# 0.1.x drove MSI Shift and super_battery alongside the fan. 0.2.0 narrowed the
+# scope to fan_mode and cooler_boost, so an upgrade leaves whatever the old
+# release last wrote with nothing in the project able to undo it. Turbo is the
+# damaging case: it lifts the CPU package power limit, so the machine keeps
+# running unrestricted long after the code that asked for it is gone. Release
+# the leftover once, here, while the old backend is still on disk to prove an
+# upgrade is what is happening. The installed controller never writes these.
+release_legacy_power_state()
+{
+	local shift_mode battery
+
+	[[ -f $INSTALLED_BACKEND ]] || return 0
+	grep -Fq 'shift_mode' "$INSTALLED_BACKEND" 2>/dev/null || return 0
+
+	if [[ -r $SHIFT_FILE && -w $SHIFT_FILE ]]; then
+		IFS= read -r shift_mode < "$SHIFT_FILE"
+		if [[ $shift_mode == turbo || $shift_mode == eco ]]; then
+			printf 'comfort\n' > "$SHIFT_FILE"
+			printf 'released MSI Shift: %s -> comfort (0.1.x leftover)\n' \
+				"$shift_mode"
+		fi
+	fi
+
+	if [[ -r $BATTERY_FILE && -w $BATTERY_FILE ]]; then
+		IFS= read -r battery < "$BATTERY_FILE"
+		if [[ $battery == on ]]; then
+			printf 'off\n' > "$BATTERY_FILE"
+			printf 'released MSI super_battery: on -> off (0.1.x leftover)\n'
+		fi
+	fi
+}
 
 [[ ${EUID} -eq 0 ]] || die 'run this installer as root'
 [[ -r /sys/class/dmi/id/sys_vendor ]] || die 'DMI vendor is unavailable'
@@ -23,6 +58,8 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 for command in python3 systemctl; do
 	command -v "$command" >/dev/null || die "missing dependency: $command"
 done
+
+release_legacy_power_state
 
 install -Dm0755 "${SOURCE_DIR}/msi-profile-control" \
 	/usr/local/sbin/msi-profile-control
