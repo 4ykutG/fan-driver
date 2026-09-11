@@ -15,8 +15,8 @@ readonly TEMP_FILE="${SYSFS_BASE}/cpu/realtime_temperature"
 readonly FAN_FILE="${SYSFS_BASE}/fan_mode"
 readonly BOOST_FILE="${SYSFS_BASE}/cooler_boost"
 readonly MODE_ORDER=(auto silent max)
-readonly BOOST_ON_TEMP=78
-readonly BOOST_OFF_TEMP=68
+readonly BOOST_ON_TEMP=90
+readonly BOOST_OFF_TEMP=75
 
 die()
 {
@@ -63,7 +63,7 @@ temperature()
 
 current_mode()
 {
-	local saved fan boost
+	local saved fan
 	if [[ -r $STATE_FILE ]]; then
 		saved=$(read_one_line "$STATE_FILE")
 		case "$saved" in
@@ -71,13 +71,17 @@ current_mode()
 		esac
 	fi
 
-	# Hardware fallback is used only on the first run. Afterwards the state
-	# file keeps a thermal Cooler Boost override from changing the user choice.
-	boost=$(read_one_line "$BOOST_FILE")
+	# Hardware fallback, reached whenever no valid choice has been recorded:
+	# on first run, after a 0.1.x profile name is left behind, and on every
+	# boot, because the state file lives on tmpfs.
+	#
+	# cooler_boost is deliberately not read here. The guard turns it on by
+	# itself above BOOST_ON_TEMP, so treating it as evidence of a user choice
+	# latches the machine: boost on is read back as max, max forces boost on
+	# at the next guard tick, and nothing short of an explicit set ever breaks
+	# the loop. Only fan_mode describes a mode the guard does not force.
 	fan=$(read_one_line "$FAN_FILE")
-	if [[ $boost == on ]]; then
-		printf 'max'
-	elif [[ $fan == silent ]]; then
+	if [[ $fan == silent ]]; then
 		printf 'silent'
 	else
 		printf 'auto'
@@ -109,7 +113,7 @@ record_state()
 	printf '%s\n' "$1" > "$STATE_FILE"
 }
 
-# At 78 C Cooler Boost is mandatory. Hysteresis prevents rapid on/off
+# At 90 C Cooler Boost is mandatory. Hysteresis prevents rapid on/off
 # switching around the threshold; the user's selected mode remains saved.
 safe_boost()
 {
@@ -145,7 +149,7 @@ apply_mode()
 	write_value "$BOOST_FILE" "$boost"
 	record_state "$mode"
 	if [[ $mode != max && $boost == on && $temp -ge $BOOST_ON_TEMP ]]; then
-		message="78°C üzeri: Cooler Boost"
+		message="90°C üzeri: Cooler Boost"
 	fi
 	printf 'applied\t%s\t%s\t%s\t%s\t%s\n' \
 		"$mode" "$temp" "$fan" "$boost" "$message"
@@ -164,7 +168,7 @@ thermal_guard()
 		[[ $boost == on ]] || { write_value "$BOOST_FILE" on; changed=1; }
 	elif (( temp >= BOOST_ON_TEMP )); then
 		[[ $boost == on ]] || { write_value "$BOOST_FILE" on; changed=1; }
-		message="78°C üzeri: Cooler Boost"
+		message="90°C üzeri: Cooler Boost"
 		(( changed == 0 )) || log_info "CPU ${temp} C; Cooler Boost forced on"
 	elif (( temp <= BOOST_OFF_TEMP )); then
 		[[ $boost == off ]] || {

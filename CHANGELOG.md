@@ -6,6 +6,11 @@
   0.1.x install left behind before overwriting it. 0.2.0 removed that scope
   without a migration, so upgrading stranded the EC in `turbo` with nothing
   left able to reset it. The controller itself still writes neither.
+- Stopped inferring Maximum Fan from `cooler_boost` when no valid mode is
+  recorded. The guard sets that bit itself above 90°C, so reading it back as a
+  user choice latched the fan on: `max` forces boost on, and boost on was read
+  as `max` again at the next tick. The state file lives on tmpfs, so this
+  fallback runs on every boot and a warm boot could latch the fan for good.
 
 ## 0.2.0 - 2026-09-07
 

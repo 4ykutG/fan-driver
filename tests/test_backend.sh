@@ -86,6 +86,20 @@ assert_value on "${SYSFS}/cooler_boost"
 assert_value comfort "${SYSFS}/shift_mode"
 assert_value unchanged "${SYSFS}/power_profile"
 
+# A 0.1.x profile name left in the state file must not be read back as
+# Maximum Fan. The guard sets cooler_boost itself, so inferring the mode from
+# it would latch the fan on: max forces boost on, boost on reads back as max.
+printf 'balanced\n' > "${STATE}/state"
+printf 'on\n' > "${SYSFS}/cooler_boost"
+printf '60\n' > "${SYSFS}/cpu/realtime_temperature"
+output=$("$backend" guard)
+assert_value off "${SYSFS}/cooler_boost"
+assert_value silent "${SYSFS}/fan_mode"
+[[ $output == *$'status\tsilent\t60\tsilent\toff\t'* ]] || {
+	printf 'stale state did not fall back to the fan mode: %s\n' "$output" >&2
+	exit 1
+}
+
 # Unknown firmware fails closed without changing any setting.
 printf 'UNKNOWN.999\n' > "${SYSFS}/fw_version"
 if "$backend" set max >/dev/null 2>&1; then
