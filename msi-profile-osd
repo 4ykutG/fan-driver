@@ -12,7 +12,6 @@ aside when that extension is enabled.
 
 import json
 import os
-import subprocess
 import sys
 
 import gi
@@ -28,7 +27,6 @@ except (ValueError, ImportError):
     LayerShell = None
 
 STATE_FILE = '/run/msi-profile-control/osd-state'
-GNOME_EXTENSION_UUID = 'msi-gf63-profile-osd@4ykutg.github.io'
 HIDE_DELAY_MS = 1800
 
 # Icons are bundled as stroke-style SVGs so the panel looks identical on
@@ -128,17 +126,13 @@ window.msi-profile-osd {
 '''
 
 
-def gnome_extension_active():
-    desktop = os.environ.get('XDG_CURRENT_DESKTOP', '')
-    if 'GNOME' not in desktop.upper():
-        return False
-    try:
-        completed = subprocess.run(
-            ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
-            capture_output=True, text=True, timeout=5, check=False)
-    except OSError:
-        return False
-    return GNOME_EXTENSION_UUID in completed.stdout
+def gnome_shell_active():
+    """Use only the Shell extension on GNOME, never the GTK fallback too."""
+    desktops = ':'.join((
+        os.environ.get('XDG_CURRENT_DESKTOP', ''),
+        os.environ.get('XDG_SESSION_DESKTOP', ''),
+    ))
+    return 'GNOME' in desktops.upper()
 
 
 class OsdApplication(Gtk.Application):
@@ -306,8 +300,8 @@ class OsdApplication(Gtk.Application):
 
 
 def main():
-    if gnome_extension_active():
-        print('msi-profile-osd: GNOME extension handles the OSD; exiting.')
+    if gnome_shell_active():
+        print('msi-profile-osd: GNOME uses the Shell extension; exiting.')
         return 0
     app = OsdApplication()
     return app.run(sys.argv)

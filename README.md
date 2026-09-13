@@ -62,6 +62,9 @@ gnome-extensions enable msi-gf63-profile-osd@4ykutg.github.io
 ```
 
 Log out and back in if the Fn+F7 mapping or OSD is not picked up immediately.
+On GNOME the Shell extension is the only OSD; the GTK fallback exits without
+opening a second panel. Upgrades disable the retired `msi-profile-osd@local`
+four-profile extension automatically when a user session is available.
 
 ## Commands
 

@@ -15,8 +15,6 @@ jobs:
       - name: Install shell linter
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Lint shell scripts
-        run: >-
-          shellcheck msi-profile-control install-system.sh gaming-setup.sh
-          uninstall.sh msi-game-run tests/test_backend.sh
+        run: shellcheck msi-profile-control install-system.sh uninstall.sh tests/test_backend.sh
       - name: Run syntax and unit tests
         run: make test

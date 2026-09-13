@@ -57,6 +57,9 @@ gnome-extensions enable msi-gf63-profile-osd@4ykutg.github.io
 ```
 
 Fn+F7 eşlemesi hemen yenilenmezse oturumu kapatıp tekrar aç.
+GNOME'da yalnız Shell eklentisi çalışır; GTK yedek OSD ikinci bir panel açmadan
+kapanır. Güncelleme sırasında eski dört profilli `msi-profile-osd@local`
+eklentisi, kullanıcı oturumu erişilebiliyorsa otomatik kapatılır.
 
 ## Elle kullanım
 

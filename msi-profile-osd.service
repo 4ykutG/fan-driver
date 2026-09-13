@@ -1,5 +1,5 @@
 [Unit]
-Description=MSI Center-style profile OSD
+Description=MSI fan mode GTK fallback OSD
 PartOf=graphical-session.target
 After=graphical-session.target
 

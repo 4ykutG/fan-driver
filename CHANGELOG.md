@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Prevented the GTK fallback OSD from running in GNOME sessions.
+- Added automatic migration from the retired four-profile GNOME extension so
+  Fn+F7 opens exactly one three-mode fan panel after upgrades.
+
 ## 0.2.1 - 2026-09-12
 
 - `install-system.sh` now releases the MSI Shift and `super_battery` values a

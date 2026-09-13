@@ -5,6 +5,7 @@ set -Eeuo pipefail
 readonly SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SYSFS_BASE="/sys/devices/platform/msi-ec"
 readonly EXTENSION_UUID="msi-gf63-profile-osd@4ykutg.github.io"
+readonly LEGACY_EXTENSION_UUID="msi-profile-osd@local"
 readonly EXTENSION_DIR="/usr/share/gnome-shell/extensions/${EXTENSION_UUID}"
 readonly INSTALLED_BACKEND="/usr/local/sbin/msi-profile-control"
 readonly SHIFT_FILE="${SYSFS_BASE}/shift_mode"
@@ -42,6 +43,30 @@ release_legacy_power_state()
 			printf 'released MSI super_battery: on -> off (0.1.x leftover)\n'
 		fi
 	fi
+}
+
+# Upgrade a logged-in GNOME user from the retired four-profile extension.
+# The GTK OSD is only a non-GNOME fallback; stopping it prevents two panels
+# until the updated session environment is picked up.
+configure_gnome_user()
+{
+	local user_id login_user runtime_dir
+	user_id=${SUDO_UID:-${PKEXEC_UID:-}}
+	[[ $user_id =~ ^[0-9]+$ && $user_id -ne 0 ]] || return 0
+	login_user=$(getent passwd "$user_id" | cut -d: -f1)
+	[[ -n $login_user ]] || return 0
+	runtime_dir="/run/user/${user_id}"
+	[[ -S ${runtime_dir}/bus ]] || return 0
+
+	local -a user_session=(runuser -u "$login_user" -- env
+		"XDG_RUNTIME_DIR=${runtime_dir}"
+		"DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus")
+	"${user_session[@]}" gnome-extensions disable \
+		"$LEGACY_EXTENSION_UUID" >/dev/null 2>&1 || true
+	"${user_session[@]}" gnome-extensions enable \
+		"$EXTENSION_UUID" >/dev/null 2>&1 || true
+	"${user_session[@]}" systemctl --user stop \
+		msi-profile-osd.service >/dev/null 2>&1 || true
 }
 
 [[ ${EUID} -eq 0 ]] || die 'run this installer as root'
@@ -91,9 +116,10 @@ install -Dm0644 "${SOURCE_DIR}/gnome-extension/stylesheet.css" \
 /usr/bin/systemctl daemon-reload
 /usr/bin/systemctl enable --now msi-profile-hotkeyd.service
 /usr/bin/systemctl --global enable msi-profile-osd.service
+configure_gnome_user
 
 printf '\nInstalled successfully.\n'
-printf 'GNOME users: gnome-extensions enable %s\n' "$EXTENSION_UUID"
+printf 'GNOME OSD: %s\n' "$EXTENSION_UUID"
 printf 'Other desktops: log out/in once to start the GTK OSD.\n'
 printf 'Support report: msi-profile-doctor\n'
 printf 'Fan telemetry: msi-profile-monitor --duration 60 -o session.csv\n'
