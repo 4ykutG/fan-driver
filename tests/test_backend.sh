@@ -54,21 +54,24 @@ assert_value off "${SYSFS}/cooler_boost"
 assert_value comfort "${SYSFS}/shift_mode"
 assert_value unchanged "${SYSFS}/power_profile"
 
-# At 90 C the safety override starts without changing the selected mode.
+# Silent is an absolute lock: heat never enables Cooler Boost.
 printf '90\n' > "${SYSFS}/cpu/realtime_temperature"
 output=$("$backend" guard)
-assert_value on "${SYSFS}/cooler_boost"
+assert_value off "${SYSFS}/cooler_boost"
 assert_value silent "${STATE}/state"
-[[ $output == *$'status\tsilent\t90\tsilent\ton\t90°C üzeri: Cooler Boost' ]]
+[[ $output == *$'status\tsilent\t90\tsilent\toff\t'* ]]
 
-# Hysteresis keeps boost running until the machine has actually cooled.
+# Only Automatic uses thermal boost and hysteresis.
+"$backend" set auto >/dev/null
+assert_value on "${SYSFS}/cooler_boost"
+assert_value auto "${STATE}/state"
 printf '80\n' > "${SYSFS}/cpu/realtime_temperature"
 "$backend" guard >/dev/null
 assert_value on "${SYSFS}/cooler_boost"
 printf '75\n' > "${SYSFS}/cpu/realtime_temperature"
 "$backend" guard >/dev/null
 assert_value off "${SYSFS}/cooler_boost"
-assert_value silent "${SYSFS}/fan_mode"
+assert_value auto "${SYSFS}/fan_mode"
 
 # Maximum fan is fixed Cooler Boost; cycle then returns to automatic.
 "$backend" set max >/dev/null
@@ -78,11 +81,11 @@ assert_value on "${SYSFS}/cooler_boost"
 assert_value auto "${STATE}/state"
 assert_value off "${SYSFS}/cooler_boost"
 
-# Even an explicit silent request cannot defeat the 90 C safety override.
+# An explicit Silent request always disables boost, even when very hot.
 printf '94\n' > "${SYSFS}/cpu/realtime_temperature"
 "$backend" set silent >/dev/null
 assert_value silent "${SYSFS}/fan_mode"
-assert_value on "${SYSFS}/cooler_boost"
+assert_value off "${SYSFS}/cooler_boost"
 assert_value comfort "${SYSFS}/shift_mode"
 assert_value unchanged "${SYSFS}/power_profile"
 

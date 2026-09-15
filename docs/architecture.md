@@ -9,6 +9,7 @@ The project has three deliberately narrow layers:
 3. The GNOME extension or GTK application renders the read-only OSD state from
    `/run/msi-profile-control/osd-state`.
 
-At 90°C the guard enables Cooler Boost without changing the saved fan mode.
-Hysteresis keeps it enabled until 75°C. No component imports a power-management
-API or writes MSI Shift, battery, CPU or GPU settings.
+Only while Automatic is selected, the guard enables Cooler Boost at 90°C and
+keeps it enabled until 75°C. Silent always writes `silent` plus boost off;
+Maximum Fan always writes `auto` plus boost on. No component imports a
+power-management API or writes MSI Shift, battery, CPU or GPU settings.

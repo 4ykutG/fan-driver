@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 readonly APP_NAME="msi-profile-control"
-readonly APP_VERSION="0.2.1"
+readonly APP_VERSION="0.2.2"
 readonly SYSFS_BASE="${MSI_PROFILE_SYSFS_BASE:-/sys/devices/platform/msi-ec}"
 readonly STATE_DIR="${MSI_PROFILE_STATE_DIR:-/run/${APP_NAME}}"
 readonly STATE_FILE="${STATE_DIR}/state"
@@ -113,8 +113,8 @@ record_state()
 	printf '%s\n' "$1" > "$STATE_FILE"
 }
 
-# At 90 C Cooler Boost is mandatory. Hysteresis prevents rapid on/off
-# switching around the threshold; the user's selected mode remains saved.
+# Automatic mode uses a 90/75 C hysteresis. Silent and Maximum Fan are
+# explicit locks and never call this helper.
 safe_boost()
 {
 	local temp=$1 current_boost=$2
@@ -136,7 +136,7 @@ apply_mode()
 			;;
 		silent)
 			fan=silent
-			boost=$(safe_boost "$temp" "$(read_one_line "$BOOST_FILE")")
+			boost=off
 			;;
 		max)
 			fan=auto
@@ -148,7 +148,7 @@ apply_mode()
 	write_value "$FAN_FILE" "$fan"
 	write_value "$BOOST_FILE" "$boost"
 	record_state "$mode"
-	if [[ $mode != max && $boost == on && $temp -ge $BOOST_ON_TEMP ]]; then
+	if [[ $mode == auto && $boost == on && $temp -ge $BOOST_ON_TEMP ]]; then
 		message="90°C üzeri: Cooler Boost"
 	fi
 	printf 'applied\t%s\t%s\t%s\t%s\t%s\n' \
@@ -166,6 +166,10 @@ thermal_guard()
 	if [[ $mode == max ]]; then
 		[[ $fan == auto ]] || { write_value "$FAN_FILE" auto; changed=1; }
 		[[ $boost == on ]] || { write_value "$BOOST_FILE" on; changed=1; }
+	elif [[ $mode == silent ]]; then
+		[[ $fan == silent ]] || { write_value "$FAN_FILE" silent; changed=1; }
+		[[ $boost == off ]] || { write_value "$BOOST_FILE" off; changed=1; }
+		(( changed == 0 )) || log_info "restored locked silent fan mode"
 	elif (( temp >= BOOST_ON_TEMP )); then
 		[[ $boost == on ]] || { write_value "$BOOST_FILE" on; changed=1; }
 		message="90°C üzeri: Cooler Boost"
@@ -176,8 +180,8 @@ thermal_guard()
 			changed=1
 			message="Soğudu: ${mode} fan modu"
 		}
-		if [[ $fan != $mode ]]; then
-			write_value "$FAN_FILE" "$mode"
+		if [[ $fan != auto ]]; then
+			write_value "$FAN_FILE" auto
 			changed=1
 		fi
 		(( changed == 0 )) || log_info "CPU ${temp} C; restored ${mode} fan mode"

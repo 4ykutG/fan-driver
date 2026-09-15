@@ -215,7 +215,7 @@ class HotkeyDaemon:
             return
         self.current = result['mode']
         self.last_boost = result['boost']
-        # Show the OSD when the 90 C override starts or cooling releases it.
+        # Only Automatic mode can change boost thermally. Show that transition.
         if old_boost is not None and old_boost != result['boost']:
             self.publish_result('applied', result)
 

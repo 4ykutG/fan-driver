@@ -2,8 +2,8 @@
 
 A small GPL-3.0 fan-only controller for the MSI Thin GF63 12VE on Linux.
 Fn+F7 opens an MSI Center-style OSD and cycles through Automatic, Silent and
-Maximum Fan. At 90°C, Cooler Boost is forced on regardless of the selected
-mode and remains on until the CPU cools to 75°C.
+Maximum Fan. Only Automatic enables Cooler Boost at 90°C and keeps it on until
+the CPU cools to 75°C. Silent and Maximum Fan are explicit fixed modes.
 
 ## Scope guarantee
 
@@ -29,12 +29,12 @@ never touches either again.
 | Fn+F7 mode | EC fan mode | Cooler Boost |
 |---|---|---|
 | Automatic | `auto` | off normally; forced on at 90°C |
-| Silent | `silent` | off normally; forced on at 90°C |
+| Silent | `silent` | always off |
 | Maximum Fan | `auto` | always on |
 
-The 90°C override does not forget the selected mode. After cooling to 75°C,
-Automatic or Silent is restored. Firmware throttling and shutdown protections
-are never disabled.
+The 90°C/75°C override applies only to Automatic. Silent never enables Cooler
+Boost, even above 90°C; the laptop may therefore thermally throttle sooner.
+Firmware throttling and shutdown protections are never disabled.
 
 ## Supported hardware
 

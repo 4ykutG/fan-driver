@@ -2,8 +2,8 @@
 
 MSI Thin GF63 12VE için GPL-3.0 lisanslı, yalnız fan denetimi yapan Linux
 yazılımıdır. Fn+F7 ile Otomatik, Sessiz ve Maksimum Fan modları arasında
-geçilir. CPU 90°C'ye ulaştığında seçili moddan bağımsız olarak Cooler Boost
-açılır; 75°C'ye soğuyunca daha önce seçilen Otomatik veya Sessiz moda dönülür.
+geçilir. Yalnız Otomatik mod CPU 90°C'ye ulaştığında Cooler Boost'u açar ve
+75°C'ye soğuyunca kapatır. Sessiz ve Maksimum Fan sabit seçimlerdir.
 
 ## Güç ayarlarından tamamen bağımsız
 
@@ -29,10 +29,12 @@ bir kez serbest bırakır (`turbo` veya `eco` -> `comfort`, `super_battery` ->
 | Fn+F7 modu | EC fan ayarı | Cooler Boost |
 |---|---|---|
 | Otomatik | `auto` | normalde kapalı, 90°C'de zorunlu açık |
-| Sessiz | `silent` | normalde kapalı, 90°C'de zorunlu açık |
+| Sessiz | `silent` | daima kapalı |
 | Maksimum Fan | `auto` | sürekli açık |
 
-Firmware'in termal yavaşlatma ve acil kapanma korumaları devre dışı bırakılmaz.
+Sessiz mod, 90°C üzerinde bile Cooler Boost açmaz; bu nedenle bilgisayar daha
+erken termal yavaşlatma yapabilir. Firmware'in termal yavaşlatma ve acil
+kapanma korumaları devre dışı bırakılmaz.
 
 ## Desteklenen sistem
 

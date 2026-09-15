@@ -50,13 +50,21 @@ class DaemonStateTests(unittest.TestCase):
         self.assertEqual(self.daemon.current, 'silent')
 
     def test_guard_publishes_automatic_boost_transition(self):
-        self.daemon.current = 'silent'
+        self.daemon.current = 'auto'
         self.daemon.last_boost = 'off'
-        hot = result('silent', 'on', '90°C üzeri: Cooler Boost')
+        hot = result('auto', 'on', '90°C üzeri: Cooler Boost')
         with mock.patch.object(hotkeyd, 'run_backend', return_value=hot):
             self.daemon.run_guard()
         self.assertEqual(self.events[-1][0], 'applied')
         self.assertEqual(self.events[-1][1]['boost'], 'on')
+
+    def test_guard_does_not_publish_when_silent_stays_off(self):
+        self.daemon.current = 'silent'
+        self.daemon.last_boost = 'off'
+        with mock.patch.object(hotkeyd, 'run_backend',
+                               return_value=result('silent', 'off')):
+            self.daemon.run_guard()
+        self.assertEqual(self.events, [])
 
 
 if __name__ == '__main__':
