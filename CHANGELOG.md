@@ -4,6 +4,8 @@
 
 - Made Silent an absolute lock with Cooler Boost always off; thermal boost now
   applies only to Automatic, while Maximum Fan remains explicitly selected.
+- Restart the hotkey daemon during upgrades so the newly installed code is
+  loaded even when the service was already active.
 - Prevented the GTK fallback OSD from running in GNOME sessions.
 - Added automatic migration from the retired four-profile GNOME extension so
   Fn+F7 opens exactly one three-mode fan panel after upgrades.

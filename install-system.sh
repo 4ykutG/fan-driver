@@ -114,7 +114,8 @@ install -Dm0644 "${SOURCE_DIR}/gnome-extension/stylesheet.css" \
 /usr/bin/systemd-hwdb update
 /usr/bin/udevadm trigger --subsystem-match=input --action=change
 /usr/bin/systemctl daemon-reload
-/usr/bin/systemctl enable --now msi-profile-hotkeyd.service
+/usr/bin/systemctl enable msi-profile-hotkeyd.service
+/usr/bin/systemctl restart msi-profile-hotkeyd.service
 /usr/bin/systemctl --global enable msi-profile-osd.service
 configure_gnome_user
 
